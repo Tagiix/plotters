@@ -15,6 +15,18 @@ pl.plot_box(by_group, reference=1.0)                      # rank groups by media
 pl.plot_tradeoff(table, x="cost", y="error", label="model", logx=True)
 ```
 
+## See every chart
+
+The repository includes a gallery of every function, in light and dark side by side. Generate and open it from a checkout (the library installed with `[dev]`, see [Install](#install)):
+
+```bash
+cd ~/code/plotters
+python -m tests.visual          # writes gallery/index.html  (add a word to build only matching cards, e.g. "views")
+open gallery/index.html         # macOS; on Linux use xdg-open, on Windows start
+```
+
+Keep `gallery/index.html` next to `gallery/plotly.min.js` (it needs it), and zip the folder to share it. It is not committed to git: it is regenerated on demand.
+
 ## Contents
 
 1. [Install](#install)
