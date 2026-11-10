@@ -35,10 +35,9 @@ def test_multiple_series_have_no_shared_band_and_are_offset():
     assert marks[0].x[0] != marks[1].x[0]
 
 
-def test_acf_series_cap_points_to_the_grid():
-    wide = pd.DataFrame(np.random.default_rng(0).normal(size=(200, 9)))
-    with pytest.raises(ValueError, match="plot_acf_grid"):
-        pl.plot_acf(wide)
+def test_acf_draws_many_series():
+    wide = pd.DataFrame(np.random.default_rng(0).normal(size=(200, 12)))
+    assert len(pl.plot_acf(wide).data) >= 12
 
 
 def test_grid_has_a_panel_and_its_own_band_per_series_with_no_cap():

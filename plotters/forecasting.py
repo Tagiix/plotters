@@ -19,7 +19,7 @@ from plotly.subplots import make_subplots
 from . import _color
 from . import style as _style
 from ._errors import convention_error
-from ._types import MAX_SERIES, SeriesLike
+from ._types import SeriesLike
 from .correlogram import _add_panel, _band
 from .frames import as_series_dict, pick
 from .layout import HEIGHT, finish
@@ -77,15 +77,13 @@ def plot_forecast(
     Raises:
         ConventionError: ``history`` is not a single Series.
         KeyError: ``lower`` / ``upper`` lack a forecast's name.
-        ValueError: only one of ``lower`` / ``upper``, or more than ``MAX_SERIES`` forecasts.
+        ValueError: only one of ``lower`` / ``upper``.
     """
     if not isinstance(history, pd.Series):
         raise convention_error("plot_forecast", "C", history, "history must be a single Series.")
     if (lower is None) != (upper is None):
         raise ValueError("lower and upper come as a pair: pass both or neither")
     fc = pick(as_series_dict(forecast, _caller="plot_forecast"), series)
-    if len(fc) > MAX_SERIES:
-        raise ValueError(f"plot_forecast draws at most {MAX_SERIES} forecasts, got {len(fc)}")
     single = len(fc) == 1 and isinstance(forecast, pd.Series)
     lo = hi = None
     if lower is not None and upper is not None:
@@ -269,13 +267,11 @@ def plot_calibration(
 
     Raises:
         ValueError: probabilities outside [0, 1], outcomes that are not 0 / 1, a length mismatch,
-            more than ``MAX_SERIES`` models or an unknown ``strategy``.
+            an unknown ``strategy``.
     """
     if strategy not in ("quantile", "uniform"):
         raise ValueError(f"strategy must be 'quantile' or 'uniform', got {strategy!r}")
     models = pick(as_series_dict(probabilities, _caller="plot_calibration"))
-    if len(models) > MAX_SERIES:
-        raise ValueError(f"plot_calibration draws at most {MAX_SERIES} models, got {len(models)}")
     y = np.asarray(outcomes, dtype=float)
     if not np.isin(y, (0.0, 1.0)).all():
         raise ValueError("outcomes must be 0 or 1")
@@ -354,15 +350,11 @@ def plot_quantile_calibration(
 
     Raises:
         ConventionError: ``actual`` is not a Series.
-        ValueError: column labels that are not levels in (0, 1), or more than ``MAX_SERIES`` models.
+        ValueError: column labels that are not levels in (0, 1).
     """
     if not isinstance(actual, pd.Series):
         raise convention_error("plot_quantile_calibration", "C", actual, "actual must be a Series.")
     models = dict(quantiles) if isinstance(quantiles, Mapping) else {"model": quantiles}
-    if len(models) > MAX_SERIES:
-        raise ValueError(
-            f"plot_quantile_calibration draws at most {MAX_SERIES} models, got {len(models)}"
-        )
     st = _style.get_style()
     z = NormalDist().inv_cdf(1 - alpha / 2)
     fig = go.Figure()
@@ -428,11 +420,9 @@ def plot_pit(
         width: Figure width in px; ``None`` fills the container.
 
     Raises:
-        ValueError: values outside [0, 1], or more than ``MAX_SERIES`` models.
+        ValueError: values outside [0, 1].
     """
     models = pick(as_series_dict(pit, _caller="plot_pit"))
-    if len(models) > MAX_SERIES:
-        raise ValueError(f"plot_pit draws at most {MAX_SERIES} models, got {len(models)}")
     st = _style.get_style()
     z = NormalDist().inv_cdf(1 - alpha / 2)
     edges = np.linspace(0, 1, bins + 1)

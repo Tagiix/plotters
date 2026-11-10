@@ -190,7 +190,7 @@ Convert between shapes with `long_to_wide`, `group_values`, `as_series_dict`, `a
 
 **Subsetting and colour order.** Convention-A plotters take `series=[...]`, which both picks a subset *and* fixes the order, and the order assigns the colour slots. An unknown name raises `KeyError: "['zz'] not in ['a', 'b', 'c']"`. It is `series=` everywhere, including `plot_box`.
 
-**`group=` and `label=` differ.** `group="model"` splits into one coloured series per value (at most 3, since scatter is read pair by pair); `label="model"` keeps one series and writes the text next to each point. `groups={family: prefixes}` collapses many members into families (the longest prefix wins) so colour means family and shape means member.
+**`group=` and `label=` differ.** `group="model"` splits into one coloured series per value (any number: past the palette the colour repeats but the marker shape changes, so every group stays distinct); `label="model"` keeps one series and names each point on hover, and writes the text on the plot once per distinct value (so several points of one config print one name, not one each; only up to 40 names are written, to avoid overprinting). Using both is better than either: colour and shape for the eye, text for certainty. `groups={family: prefixes}` collapses many members into families (the longest prefix wins) so colour means family and shape means member.
 
 ## Chart reference
 
@@ -281,7 +281,7 @@ A pooled **distribution** and a pooled **path** are different quantities: the hi
 
 | Function | For |
 |---|---|
-| `plot_tradeoff` | Two competing objectives and the Pareto frontier; `lower_is_better`, `groups=`, `connect=` |
+| `plot_tradeoff` | Two competing objectives and the Pareto frontier; `lower_is_better`, `frontier=False` to hide it, `groups=`, `connect=` |
 | `plot_rank_heatmap` | Items by contexts coloured by rank within each context (the one chart that colours by rank) |
 | `plot_bump` | Rank of each item at every step over time, names at the right end; `highlight=` greys out the rest |
 | `plot_interval` | One horizontal interval per row; intervals crossing `reference` are hollow (not separable) |
@@ -395,7 +395,7 @@ What changes for print: `vary_dash` defaults ON (no legend to click, and four so
 The library refuses rather than draw something misleading.
 
 - **One y axis, always.** There is no dual-axis option. Two measures of different scale get two charts (`plot_small_multiples`, `plot_grid`), or indexing to a common base.
-- **Series caps differ by form, deliberately.** `plot_series`: unlimited, 20 visible. `plot_cumulative`, `plot_drawdown` and `plot_rolling` follow it (`drawn=`). Other line charts (`plot_stacked`, `plot_line_band`, `plot_bars_with_line`, the model-comparison curves): 8 (`MAX_SERIES`). Scatter and facets: 3 (`MAX_ALL_PAIRS`). Coloured by rank or value, and ACF panels: none. `MAX_ALL_PAIRS` is a constant, not `len(palette)`, so growing the palette cannot silently raise the scatter cap.
+- **No colour-count caps.** A chart with many series or groups is drawn, not refused: past the palette size (15) colours repeat while the dash (lines) or marker shape (points) changes, and the interactive figure (zoom, hover, legend click, `label=`) carries the rest. `plot_series`, `plot_cumulative`, `plot_drawdown` and `plot_rolling` start with the first 20 drawn (`drawn=`) and grey the others in the legend.
 - **No violin.** A KDE over ~12 points draws density that is not in the data. `plot_box(points=True)` is the honest form below a few hundred observations per group.
 - **No pie.** `plot_bars(normalize=True)` shows the same shares readably.
 - **Area, not diameter**, carries a bubble's value; **log axes** get readable ticks; **luminance**, not position, decides cell ink.

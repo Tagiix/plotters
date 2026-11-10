@@ -15,7 +15,7 @@ import plotly.graph_objects as go
 
 from . import _color
 from . import style as _style
-from ._types import MAX_SERIES, SeriesLike
+from ._types import SeriesLike
 from .frames import as_series_dict, pick
 from .layout import HEIGHT, apply_log, finish
 from .stats import _finite, sample_expectile
@@ -31,15 +31,8 @@ __all__ = [
 ]
 
 
-def _bags(
-    data: SeriesLike, series: Sequence[str] | None, caller: str, cap: bool = True
-) -> dict[str, np.ndarray]:
+def _bags(data: SeriesLike, series: Sequence[str] | None, caller: str) -> dict[str, np.ndarray]:
     frames = pick(as_series_dict(data, _caller=caller), series)
-    if cap and len(frames) > MAX_SERIES:
-        raise ValueError(
-            f"{caller} draws at most {MAX_SERIES} series, got {len(frames)}; "
-            "pass series=[...] to choose."
-        )
     bags = {str(n): _finite(s).to_numpy() for n, s in frames.items()}
     empty = [n for n, v in bags.items() if v.size == 0]
     if empty:
@@ -276,7 +269,7 @@ def plot_histogram(
         width: Figure width in px; ``None`` fills the container.
 
     Raises:
-        ValueError: more than ``MAX_SERIES`` series or an empty series.
+        ValueError: an empty series.
     """
     bags = _bags(data, series, "plot_histogram")
     lo = min(v.min() for v in bags.values())

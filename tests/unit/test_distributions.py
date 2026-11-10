@@ -86,10 +86,9 @@ def test_histogram_shares_bins_and_density_integrates_to_one(rng):
         assert np.sum(np.asarray(t.y) * np.asarray(t.width)) == pytest.approx(1.0)
 
 
-def test_histogram_caps_series():
-    wide = pd.DataFrame(np.random.default_rng(0).normal(size=(50, 9)))
-    with pytest.raises(ValueError, match="at most"):
-        pl.plot_histogram(wide)
+def test_histogram_draws_many_series():
+    wide = pd.DataFrame(np.random.default_rng(0).normal(size=(50, 20)))
+    assert len(pl.plot_histogram(wide).data) == 20
 
 
 def test_ecdf_reaches_one_and_complementary_starts_at_one(rng):

@@ -12,7 +12,7 @@ Context for Claude Code (and any contributor) working in this repository. Read i
 uv venv && uv pip install -e ".[dev]"            # dev environment (hatchling; static editable path, Pylance-friendly)
 .venv/bin/ruff check .  &&  .venv/bin/ruff format plotters tests examples
 .venv/bin/pyright                                 # typeCheckingMode = "basic"; must report 0 errors
-.venv/bin/python -m pytest -q                     # 615 tests, ~15 s
+.venv/bin/python -m pytest -q                     # 648 tests, ~12 s
 .venv/bin/python -m tests.visual [substring]      # gallery/index.html, or gallery/only.html for matching cards
 uv build                                          # wheel + sdist into dist/ (both git-ignored)
 scripts/install-into.sh <venv-dir>...             # editable install of this checkout into other venvs
@@ -22,7 +22,15 @@ scripts/install-into.sh <venv-dir>...             # editable install of this che
 
 ## Snapshot (v0.1.0, 2026-11-10)
 
-119 exports (111 functions), 63 plotly plotters (`plot_*`) + 10 matplotlib print functions in `plotters.static`, 615 tests, 121 gallery cards. Palette worst adjacent colour-blind ΔE 15.6 light / 17.3 dark (floor 8), worst normal-vision pair 26.3 (floor 15). Verified on Python 3.10, 3.12, 3.15.
+119 exports (111 functions), 63 plotly plotters (`plot_*`) + 10 matplotlib print functions in `plotters.static`, 648 tests, 125 gallery cards. 15 categorical colours (8 original + 7 searched; `set_style(colors=8..15)`): worst adjacent colour-blind ΔE 9.2 light / 10.0 dark over all sizes (floor 8), worst normal-vision pair 16.2 / 16.0 (floor 15). Verified on Python 3.10, 3.12, 3.15.
+
+## Recent behaviour decisions (2026-11-10)
+
+- `plot_series` / `plot_cumulative` / `plot_drawdown` / `plot_rolling`: `drawn=` (was `max_visible`; `0` means the default 20, never "hide all"; negative raises). Isolated points (a lone value between gaps) get a marker. With `views=`, every view reuses palette slots from the start (`_color_slots`); `plot_views` keeps a trace's colour across views by name.
+- `plot_scatter` / `plot_shaded_scatter`: `label=` is always on hover, written on the plot only up to 40 points; hovermode `closest` (the theme's `x unified` cannot pick one point). `plot_shaded_scatter`: the diverging ramp is used only if the data straddle `reference`, else sequential; `clip=0.01` trims colour-range outliers.
+- `plot_tradeoff(frontier=True)`: `False` hides the Pareto line and rings (matches `static.plot_points(frontier=)`). A tradeoff/scatter `group=` gets a distinct colour *and* shape (`marker(f)`), `label=` is written once per distinct value (`_label_once`) and always on hover.
+- `plot_null_test`: `observed_label=`, rejection region as full-height bands with dotted cut lines.
+- **No colour-count caps anywhere** (the user's call: a drawn chart with repeating colours beats a refusal, and plotly's zoom/hover/`label=` do the rest). The `MAX_ALL_PAIRS` and the 8-series refusals are gone; `MAX_SERIES` survives only as the views-baseline rule in `plot_series(views=)`. `label=` is written once per distinct value (`_label_once`, on the point nearest the centroid) and always on hover; scatter/tradeoff groups get a distinct colour *and* shape (`marker(f)`).
 
 ## Architecture
 
@@ -58,7 +66,7 @@ Data flow in every plotter: **input normaliser (`frames.py`) → draw traces →
 
 1. **Signature.** Data args, then `title: str = ""`, `subtitle: str = ""`, then `*`, then options, then `height` and `width` (both `int | None`, `width=None` fills the container), `legend` where it makes sense. Use `Literal[...]` for enumerated strings. `series=` is the subset-and-order argument everywhere (including `plot_box`). American spelling is canonical (`color`, `normalize_*`, `center`); British names exist only as function aliases.
 2. **Docstring.** Google style: one-line summary, `Args:` documenting **every** parameter (this is what shows on VS Code hover), `Returns:`, `Raises:`. Comments only for the non-obvious *why*. An audit of "every public function has `Args:`" has been run repeatedly; keep it true.
-3. **Behaviour.** Normalise input through `frames.py`. Respect the caps (`MAX_SERIES` 8, `MAX_ALL_PAIRS` 3, `MAX_VISIBLE` 20). Refuse rather than mislead. Colours only via `style` (`color(i)`, `get_style()`, `sequential_scale()`); layout only via `finish()`; log axes only via `apply_log`.
+3. **Behaviour.** Normalise input through `frames.py`. Do not refuse on colour/series count; refuse only what would be wrong or misleading (negative stacked parts, non-numeric axes...). `MAX_VISIBLE` 20 is how many series start drawn. Colours only via `style` (`color(i)`, `get_style()`, `sequential_scale()`); layout only via `finish()`; log axes only via `apply_log`.
 4. **Export.** Add to the module's `__all__`, then regenerate `plotters/__init__.py`.
 5. **Tests.** A unit test for the behaviour **and** an entry in the `CALLS` table of `tests/unit/test_sizing.py` (a test fails if a plotter is missing from it; it checks `width`/`height` are honoured and the default leaves width unset).
 6. **Gallery card.** `tests/visual/cards_*.py`, decorated with `@card(section, title, checks=[...])`; the section must be listed in `ORDER` in `tests/visual/build.py`. The function body is displayed as the example. **Render it and look at it** (headless Chrome screenshot, see below): most layout bugs here were only visible in the picture.
@@ -67,7 +75,7 @@ Data flow in every plotter: **input normaliser (`frames.py`) → draw traces →
 ## Design rules (enforced in code; do not weaken)
 
 - **One y axis, always.** No dual-axis option; use `plot_small_multiples` / `plot_grid` or index to a base.
-- **Series caps differ by form, deliberately.** `plot_series`, `plot_cumulative`, `plot_drawdown` and `plot_rolling` unlimited (`drawn=`: 20 visible, rest `legendonly`); other line charts 8 (`MAX_SERIES`; it is deliberately not the palette size); scatter and facets 3 (`MAX_ALL_PAIRS` is a constant, not `len(palette)`); value/rank-coloured and ACF panels uncapped.
+- **No colour-count caps** (changed 2026-11-10; the earlier "caps differ by form" rule is gone). Colour repeats past the palette, and dash/marker shape change with it. `plot_series`, `plot_cumulative`, `plot_drawdown` and `plot_rolling` start with 20 drawn (`drawn=`).
 - **No violin, no pie.** `plot_box(points=True)` and `plot_bars(normalize=True)` are the honest forms.
 - **Colour order is the safety mechanism.** The 15 categorical hues (slots 0-7 the original set, 8-14 added by a search) were searched for colour-blind separation (CIEDE2000 on Machado-simulated protan/deutan/tritan, wrap-around included) and every size from 8 to 15 (`set_style(colors=)`) is validated, so each slot is also CVD-distinct from slot 0. `tests/unit/test_palette.py` enforces it; re-ordering or editing a slot requires re-validation. Worst adjacent CVD ΔE 9.2 / 10.0 (floor 8), worst normal pair 16.2 / 16.0 (floor 15): thin margins, 16 colours failed the floor.
 - **Two identity channels that wrap at the same length are one channel.** `marker(i)` shifts the shape after each `lcm(colours, 8)` slots and varies fill after `8 * colours` (192 distinct at every palette size).

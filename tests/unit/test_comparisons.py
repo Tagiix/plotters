@@ -88,11 +88,17 @@ def test_tradeoff_groups_collapse_by_longest_prefix_colour_is_family_shape_is_me
     assert len({traces[0].marker.color for traces in by_family.values()}) == 3
 
 
-def test_group_cap_points_at_the_alternatives(table):
-    with pytest.raises(ValueError, match="groups=.*plot_small_multiples"):
-        pl.plot_tradeoff(table, "cost", "error", group="model")
-    with pytest.raises(ValueError, match="capped at 3"):
-        pl.plot_scatter(table, "cost", "error", group="model")
+def test_many_groups_are_drawn_each_with_its_own_colour_and_shape(table):
+    tradeoff = pl.plot_tradeoff(table, "cost", "error", group="model")
+    scatter = pl.plot_scatter(table, "cost", "error", group="model")
+    for fig in (tradeoff, scatter):
+        points = [
+            t for t in fig.data if t.mode and "markers" in t.mode and t.name not in (None, "")
+        ]
+        identity = {
+            (t.marker.color, t.marker.symbol) for t in points if t.name != "Pareto frontier"
+        }
+        assert len(identity) >= 4, "each group is told apart by colour and shape"
     with pytest.raises(ValueError, match="needs group"):
         pl.plot_tradeoff(table, "cost", "error", groups={"a": ("a",)})
 
@@ -189,15 +195,15 @@ def test_box_series_width_from_tightest_gap_divided_by_group_count_and_median_al
     assert pl.plot_box_series(wide, "x", "y", group="g").data[0].width < boxes[0].width
 
 
-def test_small_multiples_panels_shared_legend_and_cap():
+def test_small_multiples_panels_shared_legend_and_many_groups():
     rng = np.random.default_rng(1)
     f = pd.DataFrame({"p": np.repeat(list("uvwz"), 10), "x": np.tile(np.arange(10), 4), "y": rng.normal(size=40),
                       "g": np.tile(["a", "b"], 20)})  # fmt: skip
     fig = pl.plot_small_multiples(f, "p", "x", "y", group="g", ncols=2)
     assert len([a for a in fig.layout.annotations]) == 4
     assert sum(1 for t in fig.data if t.showlegend) == 2
-    with pytest.raises(ValueError, match="capped"):
-        pl.plot_small_multiples(f.assign(g=np.tile(list("abcd"), 10)), "p", "x", "y", group="g")
+    many = pl.plot_small_multiples(f.assign(g=np.tile(list("abcd"), 10)), "p", "x", "y", group="g")
+    assert sum(1 for t in many.data if t.showlegend) == 4, "no group cap"
 
 
 def test_paired_difference_base_names_a_series_and_accumulates():
@@ -225,3 +231,17 @@ def test_interval_crossing_reference_is_hollow_and_sorted_best_first():
     assert list(fig.layout.yaxis.categoryarray) == ["a", "c", "b"]
     with pytest.raises(ValueError, match="lo > hi"):
         pl.plot_interval(f.assign(lo=5.0), "lo", "hi", "pt")
+
+
+def test_tradeoff_frontier_switch(table):
+    on = pl.plot_tradeoff(table, "cost", "error")
+    off = pl.plot_tradeoff(table, "cost", "error", frontier=False)
+    assert any(tr.name == "Pareto frontier" for tr in on.data)
+    assert (
+        not any(tr.name == "Pareto frontier" for tr in off.data)
+        and len(off.data) == len(on.data) - 2
+    )
+    assert "Pareto frontier" not in off.layout.title.text
+    assert (
+        pl.plot_tradeoff(table, "cost", "error", frontier=True).to_dict() == on.to_dict()
+    )  # default

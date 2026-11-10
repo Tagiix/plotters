@@ -49,6 +49,44 @@ def cmp_tradeoff_connect():
 
 @card(
     "Comparisons",
+    "plot_tradeoff: many configs",
+    [
+        "17 configs, 6 seeds each: every config has its own colour and shape, and its name is written once (not 6 times) next to its cloud.",
+        "Hover names every point; zoom to separate neighbours.",
+    ],
+)
+def cmp_tradeoff_many_configs():
+    rng = np.random.default_rng(4)
+    cfg = [f"cfg_{i}" for i in range(17)]
+    cx, cy = rng.uniform(0.2, 0.9, 17), rng.uniform(1.0, 5.0, 17)
+    sweep = pd.DataFrame(
+        {
+            "config": np.repeat(cfg, 6),
+            "turnover_ratio": np.repeat(cx, 6) * np.exp(rng.normal(0, 0.03, 102)),
+            "loss": np.repeat(cy, 6) * np.exp(rng.normal(0, 0.03, 102)),
+        }
+    )
+    return pl.plot_tradeoff(
+        sweep, "turnover_ratio", "loss", "Every survivor at every matched cost",
+        label="config", group="config", logx=True, logy=True,
+    )  # fmt: skip
+
+
+@card(
+    "Comparisons",
+    "plot_tradeoff: no frontier",
+    [
+        "frontier=False: the same scatter without the dashed line and rings; colour, shape and labels are unchanged.",
+    ],
+)
+def cmp_tradeoff_no_frontier():
+    t = _models()
+    return pl.plot_tradeoff(t, "cost", "error", "Cost versus error", label="model", group="model",
+                            groups={"ewrms": ("ewrms",), "har": ("har",), "range": ("range",)}, frontier=False)  # fmt: skip
+
+
+@card(
+    "Comparisons",
     "plot_tradeoff: higher is better",
     [
         "lower_is_better=(True, False): cost low, score high wins; the frontier runs up and to the left.",

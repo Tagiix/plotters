@@ -7,7 +7,7 @@ Print figures live in :mod:`plotters.static`, which needs matplotlib and is not 
 from importlib.metadata import PackageNotFoundError, version
 
 from ._errors import ConventionError
-from ._types import MAX_ALL_PAIRS, MAX_SERIES, MAX_VISIBLE, SeriesLike
+from ._types import MAX_SERIES, MAX_VISIBLE, SeriesLike
 from .analysis import (
     analyze_series,
     compare_series,
@@ -167,7 +167,6 @@ __all__ = [
     "__version__",
     # Errors, limits and types
     "ConventionError",
-    "MAX_ALL_PAIRS",
     "MAX_SERIES",
     "MAX_VISIBLE",
     "SeriesLike",

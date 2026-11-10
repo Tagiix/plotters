@@ -304,7 +304,7 @@ def plot_points(
         title: Left-aligned title.
         subtitle: Muted wrapped subtitle.
         label: Column written next to each point.
-        group: Column splitting points into coloured series (at most 8).
+        group: Column splitting points into coloured series.
         frontier: Draw the Pareto front (lower is better on both axes).
         xlabel: X axis title; defaults to the column name.
         ylabel: Y axis title; defaults to the column name.

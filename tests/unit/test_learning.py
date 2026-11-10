@@ -40,8 +40,7 @@ def test_decision_boundary_reference_untinted_and_validation(rng):
     with pytest.raises(ValueError, match="x=, y= and group="):
         pl.plot_decision_boundary(grid, pts)
     many = pd.DataFrame({"a": [0.0] * 4, "b": [0.0] * 4, "c": list("wxyz")})
-    with pytest.raises(ValueError, match="at most 3"):
-        pl.plot_decision_boundary(grid, many, x="a", y="b", group="c")
+    assert pl.plot_decision_boundary(grid, many, x="a", y="b", group="c").data, "no class cap"
     with pytest.raises(pl.ConventionError):
         pl.plot_decision_boundary(np.zeros((3, 3)))  # type: ignore[arg-type]
 
@@ -94,8 +93,7 @@ def test_error_curves_mark_the_minimum_or_the_one_se_choice():
         pl.plot_error_curves(curves, select="test", rule="1se")
     with pytest.raises(ValueError, match="not one of"):
         pl.plot_error_curves(curves, select="nope")
-    with pytest.raises(ValueError, match="at most"):
-        pl.plot_error_curves(pd.DataFrame(np.ones((3, 9))))
+    assert len(pl.plot_error_curves(pd.DataFrame(np.ones((3, 12)))).data) >= 12, "no curve cap"
 
 
 def test_roc_auc_known_values_and_ties():

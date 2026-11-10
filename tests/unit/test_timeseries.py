@@ -89,10 +89,11 @@ def test_percent_logy_and_refusal_on_non_positive(wide):
     assert pl.plot_series(wide + 1, "t", logy=True).layout.yaxis.type == "log"
 
 
-def test_cap_on_stacked_and_bars_with_line_only():
-    many = pd.DataFrame({f"s{i}": np.arange(1.0, 6.0) for i in range(9)})
-    with pytest.raises(ValueError, match="plot_series"):
-        pl.plot_stacked(many)
+def test_no_series_cap_on_stacked_bars_with_line_and_line_band():
+    many = pd.DataFrame({f"s{i}": np.arange(1.0, 6.0) for i in range(20)})
+    assert len(pl.plot_stacked(many).data) == 20
+    assert len(pl.plot_bars_with_line(many["s0"], many.iloc[:, 1:]).data) == 20
+    assert len(pl.plot_line_band(many, many - 0.5, many + 0.5).data) >= 20
 
 
 def test_cumulative_drawdown_rolling_have_no_cap_and_start_drawn_up_to_drawn():

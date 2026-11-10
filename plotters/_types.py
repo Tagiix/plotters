@@ -13,7 +13,4 @@ MAX_VISIBLE = 20
 """``plot_series``: series drawn on open; the rest start ``legendonly``."""
 
 MAX_SERIES = 8
-"""Colour guard for line charts other than ``plot_series``: one series per categorical colour."""
-
-MAX_ALL_PAIRS = 3
-"""Scatter and facets are read pair by pair; no ordering of 8 hues clears the floors past 3."""
+"""``plot_series(views=)``: past this many unnamed (baseline) series the views become an explicit allowlist."""

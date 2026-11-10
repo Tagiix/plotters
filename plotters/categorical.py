@@ -16,7 +16,6 @@ import plotly.graph_objects as go
 from . import _color
 from . import style as _style
 from ._errors import convention_error
-from ._types import MAX_SERIES
 from .frames import _one_column, _require_columns, as_value_series
 from .layout import HEIGHT, finish
 
@@ -217,14 +216,10 @@ def plot_grouped_bars(
 
     Raises:
         ConventionError: ``frame`` is not a DataFrame.
-        ValueError: more than ``MAX_SERIES`` columns, or negative values when stacking.
+        ValueError: negative values when stacking.
     """
     if not isinstance(frame, pd.DataFrame):
         raise convention_error("plot_grouped_bars", "D", frame)
-    if frame.shape[1] > MAX_SERIES:
-        raise ValueError(
-            f"plot_grouped_bars draws at most {MAX_SERIES} series, got {frame.shape[1]}"
-        )
     stack = stacked or normalize
     if stack and (frame.to_numpy(dtype=float) < 0).any():
         raise ValueError("stacked bars need non-negative values")

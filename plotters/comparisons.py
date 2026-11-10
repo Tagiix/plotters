@@ -21,9 +21,15 @@ from plotly.subplots import make_subplots
 
 from . import _color
 from . import style as _style
-from ._checks import _MARKER_SIZE, _cap_groups, _log_bounds, _numeric
+from ._checks import (
+    _MARKER_SIZE,
+    _axis_values,
+    _label_once,
+    _log_bounds,
+    _numeric,
+)
 from ._errors import convention_error
-from ._types import MAX_SERIES, SeriesLike
+from ._types import SeriesLike
 from .frames import _one_column, _require_columns, as_series_dict, group_by_prefix, pick
 from .layout import HEIGHT, apply_log, finish
 
@@ -77,6 +83,7 @@ def plot_tradeoff(
     group: str | None = None,
     groups: Mapping[str, Sequence[str]] | None = None,
     lower_is_better: bool | tuple[bool, bool] = (True, True),
+    frontier: bool = True,
     connect: str | None = None,
     logx: bool = False,
     logy: bool = False,
@@ -97,12 +104,15 @@ def plot_tradeoff(
         y: Column for the second objective.
         title: Figure title.
         subtitle: Muted line under the title; a default states which corner wins.
-        label: Column written next to each point (e.g. the model name).
-        group: Column naming the member of a family (at most 3 values unless ``groups`` collapses
-            them).
+        label: Column naming each point (e.g. the model name): shown on hover and written once per
+            distinct value, on the point nearest its centroid, so repeated names do not overprint.
+        group: Column naming the member of a family (each value gets its own colour and shape; ``groups``
+            collapses them into families).
         groups: ``{family: prefixes}``. Collapses ``group``'s values into families by the
             **longest** matching prefix, so colour means family and shape means member.
         lower_is_better: Which corner wins: one bool for both axes or ``(x_flag, y_flag)``.
+        frontier: Draw the Pareto frontier (dashed line, ringed points). ``False`` leaves the plain
+            scatter, still coloured and shaped by ``group`` / ``groups``.
         connect: Numeric column; joins each group's points in order along it, turning a cloud into
             one path per group.
         logx: Logarithmic x axis.
@@ -132,8 +142,6 @@ def plot_tradeoff(
     else:
         families = members
     family_names = list(pd.unique(families))
-    if group:
-        _cap_groups(family_names, caller, group)
 
     fig = go.Figure()
     for f, fam in enumerate(family_names):
@@ -141,13 +149,21 @@ def plot_tradeoff(
         member_names = list(pd.unique(members[in_family]))
         for k, member in enumerate(member_names):
             mask = in_family & (members == member).to_numpy()
-            base = _style.marker(k, size=_MARKER_SIZE)
-            text = _one_column(frame, label).astype(str).to_numpy()[mask] if label else None
+            # members of one family differ by shape; without families each group needs its own
+            base = _style.marker(k if groups is not None else f, size=_MARKER_SIZE)
+            names = _one_column(frame, label).astype(str).to_numpy()[mask] if label else None
+            text = (
+                _label_once(names, _axis_values(xs, logx)[mask], _axis_values(ys, logy)[mask])
+                if names is not None
+                else None
+            )
             name = member
             fig.add_scatter(
                 x=xs[mask], y=ys[mask], mode="markers+text" if label else "markers", name=name or "points",
                 legendgroup=fam, marker={**base, "color": _style.color(f) if group else st.accent},
                 text=text, textposition="top right", textfont={"size": 10, "color": st.muted},
+                customdata=names,
+                hovertemplate=(f"%{{customdata}}<br>{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<extra>{name}</extra>" if label else None),
                 showlegend=bool(group),
             )  # fmt: skip
         if connect:
@@ -155,24 +171,26 @@ def plot_tradeoff(
             fig.add_scatter(x=xs[in_family][order], y=ys[in_family][order], mode="lines", showlegend=False,
                             hoverinfo="skip", legendgroup=fam,
                             line={"color": _color.with_alpha(_style.color(f), 0.5), "width": 1.4})  # fmt: skip
-    fx, fy = xs[front], ys[front]
-    order = np.argsort(fx)
-    fig.add_scatter(
-        x=fx[order],
-        y=fy[order],
-        mode="lines",
-        name="Pareto frontier",
-        line={"color": st.muted, "width": 1.4, "dash": "dash"},
-    )
-    fig.add_scatter(x=fx, y=fy, mode="markers", showlegend=False, hoverinfo="skip",
-                    marker={"size": _MARKER_SIZE + 9, "color": "rgba(0,0,0,0)", "line": {"width": 1.5, "color": st.ink_2}})  # fmt: skip
+    if frontier:
+        fx, fy = xs[front], ys[front]
+        order = np.argsort(fx)
+        fig.add_scatter(
+            x=fx[order],
+            y=fy[order],
+            mode="lines",
+            name="Pareto frontier",
+            line={"color": st.muted, "width": 1.4, "dash": "dash"},
+        )
+        fig.add_scatter(x=fx, y=fy, mode="markers", showlegend=False, hoverinfo="skip",
+                        marker={"size": _MARKER_SIZE + 9, "color": "rgba(0,0,0,0)", "line": {"width": 1.5, "color": st.ink_2}})  # fmt: skip
     if logx:
         apply_log(fig, "x", *_log_bounds(xs, caller, "x"))
     if logy:
         apply_log(fig, "y", *_log_bounds(ys, caller, "y"))
     corner = f"{'lower' if lx else 'higher'} {x}, {'lower' if ly else 'higher'} {y} wins"
-    return finish(fig, title, _sub(subtitle, f"{corner}; ringed points are the Pareto frontier"),
-                  xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=True, width=width)  # fmt: skip
+    note = f"{corner}; ringed points are the Pareto frontier" if frontier else corner
+    return finish(fig, title, _sub(subtitle, note),
+                  xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=frontier or bool(group), width=width)  # fmt: skip
 
 
 def plot_rank_heatmap(
@@ -288,7 +306,7 @@ def plot_box_series(
         y: Column with the observations.
         title: Figure title.
         subtitle: Muted line under the title.
-        group: Column splitting the observations into curves (at most 8).
+        group: Column splitting the observations into curves.
         label: Column shown on hover for each observation.
         points: Show every observation next to its box.
         xlabel: X axis title; defaults to the column name.
@@ -297,15 +315,13 @@ def plot_box_series(
         width: Figure width in px; ``None`` fills the container.
 
     Raises:
-        ValueError: ``x`` is not numeric, or more than 8 groups.
+        ValueError: ``x`` is not numeric.
     """
     caller = "plot_box_series"
     _require_columns(frame, caller, x=x, y=y, group=group, label=label)
     xs = _numeric(frame, x, caller)
     ys = _numeric(frame, y, caller)
     names = list(pd.unique(_one_column(frame, group).astype(str))) if group else [""]
-    if len(names) > MAX_SERIES:
-        raise ValueError(f"{caller}: group={group!r} has {len(names)} values; at most {MAX_SERIES}")
     positions = np.unique(xs[np.isfinite(xs)])
     gap = float(np.min(np.diff(positions))) if positions.size > 1 else 1.0
     box_width = gap * 0.8 / len(names)
@@ -377,7 +393,7 @@ def plot_small_multiples(
         y: Column for the y axis.
         title: Figure title.
         subtitle: Muted line under the title.
-        group: Column splitting each panel into coloured lines (at most 3 values).
+        group: Column splitting each panel into coloured lines.
         ncols: Panels per row.
         shared_y: Share the y range across panels so they are comparable.
         panel_height: Height of one panel row in px.
@@ -387,15 +403,13 @@ def plot_small_multiples(
         ylabel: Y axis title; defaults to the column name.
 
     Raises:
-        ValueError: more than 3 groups, or non-numeric ``y``.
+        ValueError: non-numeric ``y``.
     """
     caller = "plot_small_multiples"
     _require_columns(frame, caller, panel=panel, x=x, y=y, group=group)
     _numeric(frame, y, caller)
     panels = [str(p) for p in pd.unique(_one_column(frame, panel))]
     groups = [str(g) for g in pd.unique(_one_column(frame, group))] if group else [""]
-    if group:
-        _cap_groups(groups, caller, group)
     rows = -(-len(panels) // ncols)
     fig = make_subplots(rows=rows, cols=min(ncols, len(panels)), subplot_titles=panels, shared_yaxes=shared_y,
                         horizontal_spacing=0.06, vertical_spacing=min(0.14, 0.6 / rows))  # fmt: skip
@@ -452,7 +466,7 @@ def plot_paired_difference(
 
     Raises:
         KeyError: ``base`` is not one of the series.
-        ValueError: fewer than two series, or more than 8.
+        ValueError: fewer than two series.
     """
     frames = pick(as_series_dict(data, _caller="plot_paired_difference"), series)
     if base not in frames:
@@ -460,10 +474,6 @@ def plot_paired_difference(
     others = {k: v for k, v in frames.items() if k != base}
     if not others:
         raise ValueError("plot_paired_difference needs at least one series besides base")
-    if len(others) > MAX_SERIES:
-        raise ValueError(
-            f"plot_paired_difference draws at most {MAX_SERIES} comparisons, got {len(others)}"
-        )
     fig = go.Figure()
     fig.add_hline(y=0, line={"color": _style.get_style().axis, "width": 1})
     for i, (name, s) in enumerate(others.items()):
@@ -505,7 +515,7 @@ def plot_interval(
         title: Figure title.
         subtitle: Muted line under the title.
         label: Column naming each row; defaults to the frame's index.
-        group: Column colouring the rows (at most 8 values).
+        group: Column colouring the rows.
         reference: Value the intervals are compared with (such as 0 for a difference). Draws a
             dotted line and fades intervals that cross it.
         sort: Order rows by ``point``, best at the top.
@@ -515,7 +525,7 @@ def plot_interval(
         width: Figure width in px; ``None`` fills the container.
 
     Raises:
-        ValueError: an interval has ``low > high``, or more than 8 groups.
+        ValueError: an interval has ``low > high``.
     """
     caller = "plot_interval"
     _require_columns(frame, caller, low=low, high=high, point=point, label=label, group=group)
@@ -533,10 +543,6 @@ def plot_interval(
     st = _style.get_style()
     gcol = _one_column(frame, group).astype(str).to_numpy() if group else np.full(len(frame), "")
     gnames = list(pd.unique(gcol))
-    if len(gnames) > MAX_SERIES:
-        raise ValueError(
-            f"{caller}: group={group!r} has {len(gnames)} values; at most {MAX_SERIES}"
-        )
     fig = go.Figure()
     ylabels = [names[i] for i in order]
     for gi, g in enumerate(gnames):

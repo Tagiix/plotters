@@ -40,14 +40,6 @@ def _x(index: pd.Index) -> pd.Index:
     return index.to_timestamp() if isinstance(index, pd.PeriodIndex) else index
 
 
-def _guard_series_count(frames: Mapping[str, pd.Series], caller: str) -> None:
-    if len(frames) > MAX_SERIES:
-        raise ValueError(
-            f"{caller} draws at most {MAX_SERIES} series, got "
-            f"{len(frames)}. Pass series=[...] to choose, or use plot_series, which has no limit."
-        )
-
-
 def _initial_visibility(count: int, drawn: int) -> list[Visibility]:
     """``True`` for the first ``drawn`` series, ``"legendonly"`` for the rest (one click to add).
 
@@ -409,12 +401,10 @@ def plot_bars_with_line(
 
     Raises:
         ConventionError: ``bars`` is not a Series.
-        ValueError: more than ``MAX_SERIES`` lines.
     """
     if not isinstance(bars, pd.Series):
         raise convention_error("plot_bars_with_line", "C", bars, "bars must be a single Series.")
     lines = as_series_dict(line, _caller="plot_bars_with_line")
-    _guard_series_count(lines, "plot_bars_with_line")
     st = _style.get_style()
 
     fig = go.Figure()
@@ -601,10 +591,9 @@ def plot_stacked(
         width: Figure width in px.
 
     Raises:
-        ValueError: a part is negative, or more than ``MAX_SERIES`` series.
+        ValueError: a part is negative.
     """
     frames = pick(as_series_dict(data, _caller="plot_stacked"), series)
-    _guard_series_count(frames, "plot_stacked")
     for name, s in frames.items():
         if (s.dropna() < 0).any():
             raise ValueError(f"plot_stacked needs non-negative parts; {name!r} has negative values")
@@ -746,13 +735,10 @@ def plot_line_band(
 
     Raises:
         KeyError: ``lower`` / ``upper`` lack a label present in ``data``.
-        ValueError: more than ``MAX_SERIES`` series.
     """
     centre = pick(as_series_dict(data, _caller="plot_line_band"), series)
     lo = as_series_dict(lower, _caller="plot_line_band")
     hi = as_series_dict(upper, _caller="plot_line_band")
-    if len(centre) > MAX_SERIES:
-        raise ValueError(f"plot_line_band draws at most {MAX_SERIES} series, got {len(centre)}")
     for name in centre:
         for which, d in (("lower", lo), ("upper", hi)):
             if name not in d:

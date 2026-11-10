@@ -16,7 +16,13 @@ from plotly.subplots import make_subplots
 
 from . import _color
 from . import style as _style
-from ._checks import _MARKER_SIZE, _cap_groups, _log_bounds, _numeric
+from ._checks import (
+    _MARKER_SIZE,
+    _axis_values,
+    _label_once,
+    _log_bounds,
+    _numeric,
+)
 from ._errors import convention_error
 from .frames import _one_column, _require_columns
 from .layout import HEIGHT, apply_log, finish
@@ -81,9 +87,10 @@ def plot_scatter(
         y: Column for the y axis.
         title: Figure title.
         subtitle: Muted line under the title.
-        group: Column whose values each become one coloured series (at most 3 values).
-        label: Column naming each point. Always shown on hover; also written next to the points
-            when there are at most 40 of them (more would overprint).
+        group: Column whose values each become one coloured series (colour and shape both change,
+            so a label is optional).
+        label: Column naming each point. Always shown on hover; also written on the plot, once per
+            distinct value (on the point nearest its centroid), when there are at most 40 of them.
         size: Non-negative numeric column that sets each marker's **area** (a bubble chart). The
             default subtitle says so.
         diagonal: Draw ``y = x``.
@@ -97,7 +104,7 @@ def plot_scatter(
     Raises:
         ConventionError: ``frame`` is not a DataFrame (a Series or dict was passed).
         KeyError: a named column is missing.
-        ValueError: more than 3 groups, a non-numeric axis column, or a log axis with
+        ValueError: a non-numeric axis column, or a log axis with
             non-positive values.
     """
     _require_columns(frame, "plot_scatter", x=x, y=y, group=group, label=label, size=size)
@@ -110,11 +117,15 @@ def plot_scatter(
     parts: list[tuple[str, pd.Index]] = [("", frame.index)]
     if group is not None:
         values = list(pd.unique(_one_column(frame, group)))
-        _cap_groups(values, "plot_scatter", group)
         parts = [(str(v), frame.index[_one_column(frame, group).to_numpy() == v]) for v in values]
     for i, (name, idx) in enumerate(parts):
         mask = frame.index.isin(idx)
-        text = _one_column(frame, label).astype(str).to_numpy()[mask] if label else None
+        names = _one_column(frame, label).astype(str).to_numpy()[mask] if label else None
+        text = (
+            _label_once(names, _axis_values(xs, logx)[mask], _axis_values(ys, logy)[mask])
+            if names is not None
+            else None
+        )
         marker = {
             **_style.marker(i, size=_MARKER_SIZE),
             "color": _style.color(i) if group else st.accent,
@@ -126,11 +137,12 @@ def plot_scatter(
                 opacity=0.7,
                 line={"width": 1, "color": st.surface},
             )
-        written = bool(label) and int(mask.sum()) <= _MAX_WRITTEN_LABELS
+        written = names is not None and len(set(names)) <= _MAX_WRITTEN_LABELS
         fig.add_scatter(
             x=xs[mask], y=ys[mask], mode="markers+text" if written else "markers", name=name,
             marker=marker, text=text, textposition="top right", textfont={"size": 10, "color": st.muted},
-            hovertemplate=(f"%{{text}}<br>{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<extra>{name}</extra>" if label else None),
+            customdata=names,
+            hovertemplate=(f"%{{customdata}}<br>{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<extra>{name}</extra>" if label else None),
             showlegend=group is not None,
         )  # fmt: skip
     fig.update_layout(hovermode="closest")  # the theme's "x unified" cannot pick one point
@@ -179,8 +191,8 @@ def plot_shaded_scatter(
         shade: Numeric column that sets the colour.
         title: Figure title.
         subtitle: Muted line under the title.
-        label: Column naming each point. Always shown on hover; also written next to the points
-            when there are at most 40 of them (more would overprint).
+        label: Column naming each point. Always shown on hover; also written on the plot, once per
+            distinct value (on the point nearest its centroid), when there are at most 40 of them.
         size: Non-negative numeric column that sets each marker's area, so one chart carries four
             variables (x, y, colour and size).
         log_shade: Colour by ``log10(shade)`` for a geometric ratio (needs positive values);
@@ -244,13 +256,19 @@ def plot_shaded_scatter(
         "tickfont": {"size": 10, "color": st.muted}, "tickmode": "array", "tickvals": ticks.tolist(),
         "ticktext": [f"{10**t:.3g}" if log_shade else f"{t:.3g}" for t in ticks],
     }  # fmt: skip
-    text = _one_column(frame, label).astype(str).to_numpy() if label else None
-    written = bool(label) and len(xs) <= _MAX_WRITTEN_LABELS
-    head = "%{text}<br>" if label else ""
+    names = _one_column(frame, label).astype(str).to_numpy() if label else None
+    text = (
+        _label_once(names, _axis_values(xs, logx), _axis_values(ys, logy))
+        if names is not None
+        else None
+    )
+    written = names is not None and len(set(names)) <= _MAX_WRITTEN_LABELS
+    head = "%{customdata[1]}<br>" if label else ""
     fig = go.Figure(go.Scatter(
         x=xs, y=ys, mode="markers+text" if written else "markers", marker=marker, text=text,
-        textposition="top right", textfont={"size": 10, "color": st.muted}, customdata=sh,
-        hovertemplate=f"{head}{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<br>{shade}=%{{customdata:.4g}}<extra></extra>",
+        textposition="top right", textfont={"size": 10, "color": st.muted},
+        customdata=np.stack([sh, names if names is not None else np.full(sh.shape, "")], axis=-1),
+        hovertemplate=f"{head}{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<br>{shade}=%{{customdata[0]:.4g}}<extra></extra>",
     ))  # fmt: skip
     fig.update_layout(hovermode="closest")
     if logx:
@@ -400,7 +418,7 @@ def plot_regression(
         y: Numeric column for y.
         title: Figure title.
         subtitle: Muted line under the title; a default reports the slope and R² when ``degree=1``.
-        group: Column splitting the data into separately fitted groups (at most 3 values).
+        group: Column splitting the data into separately fitted groups.
         degree: Polynomial degree of the fit.
         band: Draw the confidence band.
         xlabel: X axis title; defaults to the column name.
@@ -409,15 +427,11 @@ def plot_regression(
         width: Figure width in px; ``None`` fills the container.
 
     Raises:
-        ValueError: too few points for the degree, or more than 3 groups.
+        ValueError: too few points for the degree.
     """
     _require_columns(frame, "plot_regression", x=x, y=y, group=group)
     gcol = _one_column(frame, group).astype(str).to_numpy() if group else np.full(len(frame), "")
     names = list(pd.unique(gcol))
-    if len(names) > 3:
-        raise ValueError(
-            f"plot_regression: group={group!r} has {len(names)} values; at most 3 (read pair by pair)"
-        )
     fig = go.Figure()
     notes = []
     for i, name in enumerate(names):

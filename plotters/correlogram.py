@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from . import style as _style
-from ._types import MAX_SERIES, SeriesLike
+from ._types import SeriesLike
 from .frames import as_series_dict, pick
 from .layout import HEIGHT, finish
 from .stats import _finite, acf_values, bartlett_band, pacf_values
@@ -106,7 +106,7 @@ def plot_acf(
         width: Figure width in px; ``None`` fills the container.
 
     Raises:
-        ValueError: more than ``MAX_SERIES`` series, or ``lags`` too large for the sample.
+        ValueError: ``lags`` too large for the sample.
     """
     return _stem_figure(
         data, title, subtitle, lags, absolute, alpha, series, height, partial=False, width=width
@@ -146,7 +146,7 @@ def plot_pacf(
         width: Figure width in px; ``None`` fills the container.
 
     Raises:
-        ValueError: more than ``MAX_SERIES`` series, or ``lags`` too large for the sample.
+        ValueError: ``lags`` too large for the sample.
     """
     return _stem_figure(
         data, title, subtitle, lags, absolute, alpha, series, height, partial=True, width=width
@@ -168,10 +168,6 @@ def _stem_figure(
 ) -> go.Figure:
     caller = "plot_pacf" if partial else "plot_acf"
     frames = pick(as_series_dict(data, _caller=caller), series)
-    if len(frames) > MAX_SERIES:
-        raise ValueError(
-            f"{caller} draws at most {MAX_SERIES} series; use plot_acf_grid, which has no cap"
-        )
     fig = go.Figure()
     lag = np.arange(1, lags + 1, dtype=float)
     single = len(frames) == 1

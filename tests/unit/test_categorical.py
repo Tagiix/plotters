@@ -47,7 +47,7 @@ def test_counts_counts_values_and_drops_missing_by_default():
     assert len(kept.data[0].y) == 2
 
 
-def test_grouped_bars_modes_and_cap():
+def test_grouped_bars_modes_and_many_series():
     f = pd.DataFrame({"s1": [1.0, 2.0], "s2": [3.0, 4.0]}, index=["u", "v"])
     assert pl.plot_grouped_bars(f).layout.barmode == "group"
     assert pl.plot_grouped_bars(f, stacked=True).layout.barmode == "relative"
@@ -55,8 +55,7 @@ def test_grouped_bars_modes_and_cap():
     assert np.asarray(norm.data[0].y) + np.asarray(norm.data[1].y) == pytest.approx([1.0, 1.0])
     with pytest.raises(ValueError, match="non-negative"):
         pl.plot_grouped_bars(-f, stacked=True)
-    with pytest.raises(ValueError, match="at most"):
-        pl.plot_grouped_bars(pd.DataFrame(np.ones((2, 9))))
+    assert len(pl.plot_grouped_bars(pd.DataFrame(np.ones((2, 20)))).data) == 20, "no series cap"
     with pytest.raises(pl.ConventionError):
         pl.plot_grouped_bars({"a": 1})  # type: ignore[arg-type]
 
@@ -84,7 +83,7 @@ def test_line_band_keeps_labels_and_requires_matching_bands():
         pl.plot_line_band(s, {"other": s - 1}, s + 1)
 
 
-def test_regression_fit_recovers_slope_band_contains_mean_and_group_cap():
+def test_regression_fit_recovers_slope_band_contains_mean_and_groups():
     rng = np.random.default_rng(0)
     x = rng.normal(size=400)
     f = pd.DataFrame({"x": x, "y": 3 * x + 1 + rng.normal(0, 0.5, 400)})
@@ -95,8 +94,7 @@ def test_regression_fit_recovers_slope_band_contains_mean_and_group_cap():
     line = fig.data[2]
     assert np.interp(0, line.x, line.y) == pytest.approx(1.0, abs=0.15)
     f["g"] = rng.choice(list("abcd"), 400)
-    with pytest.raises(ValueError, match="at most 3"):
-        pl.plot_regression(f, "x", "y", group="g")
+    assert len(pl.plot_regression(f, "x", "y", group="g").data) >= 4 * 3, "no group cap"
     with pytest.raises(ValueError, match="more than"):
         pl.plot_regression(f.head(2), "x", "y")
 

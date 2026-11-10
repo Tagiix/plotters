@@ -208,7 +208,7 @@ def test_labels_are_written_only_when_few_and_always_on_hover():
         few = fn(_pairs(10), "x", "y", label="p", **extra).data[0]
         many = fn(_pairs(500), "x", "y", label="p", **extra).data[0]
         assert few.mode == "markers+text" and many.mode == "markers"
-        assert "%{text}" in many.hovertemplate
+        assert "customdata" in many.hovertemplate
 
 
 def test_scatter_hover_is_closest_point():
@@ -233,3 +233,25 @@ def test_shade_clip_ignores_outliers_and_is_validated():
     assert clipped.cmax < 10 < full.cmax
     with pytest.raises(ValueError, match="clip"):
         pl.plot_shaded_scatter(frame, "x", "y", "s", clip=0.6)
+
+
+def test_repeated_labels_are_written_once_per_value_and_groups_stay_distinct():
+    """Many points per config, label = group: one text per config, 17 configs all told apart."""
+    rng = np.random.default_rng(2)
+    n_cfg, n_seed = 17, 6
+    sweep = pd.DataFrame(
+        {
+            "config": np.repeat([f"cfg{i}" for i in range(n_cfg)], n_seed),
+            "x": np.repeat(rng.uniform(0.2, 0.9, n_cfg), n_seed) + rng.normal(0, 0.01, n_cfg * n_seed),
+            "y": np.repeat(rng.uniform(1, 5, n_cfg), n_seed) + rng.normal(0, 0.05, n_cfg * n_seed),
+        }
+    )  # fmt: skip
+    for fig in (
+        pl.plot_tradeoff(sweep, "x", "y", label="config", group="config", logx=True, logy=True),
+        pl.plot_scatter(sweep, "x", "y", label="config", group="config"),
+    ):
+        traces = [t for t in fig.data if t.name and t.name.startswith("cfg")]
+        assert len(traces) == n_cfg
+        assert all(sum(1 for s in t.text if s) == 1 for t in traces), "one written label per config"
+        assert all(set(t.customdata) == {t.name} for t in traces), "every point named on hover"
+        assert len({(t.marker.color, t.marker.symbol) for t in traces}) == n_cfg

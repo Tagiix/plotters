@@ -19,7 +19,7 @@ from plotly.subplots import make_subplots
 from . import _color
 from . import style as _style
 from ._errors import convention_error
-from ._types import MAX_ALL_PAIRS, MAX_SERIES, SeriesLike
+from ._types import SeriesLike
 from .frames import _one_column, _require_columns, as_series_dict, pick
 from .layout import HEIGHT, apply_log, finish
 from .stats import (
@@ -100,7 +100,7 @@ def plot_decision_boundary(
 
     Raises:
         ConventionError: ``grid`` is not a DataFrame.
-        ValueError: ``points`` without ``x``, ``y`` and ``group``, or more than 3 classes.
+        ValueError: ``points`` without ``x``, ``y`` and ``group``.
     """
     xs, ys, z = _grid_axes(grid, "plot_decision_boundary")
     st = _style.get_style()
@@ -128,10 +128,6 @@ def plot_decision_boundary(
             raise ValueError("plot_decision_boundary: points needs x=, y= and group= column names")
         _require_columns(points, "plot_decision_boundary", x=x, y=y, group=group)
         classes = list(pd.unique(_one_column(points, group)))
-        if len(classes) > MAX_ALL_PAIRS:
-            raise ValueError(
-                f"plot_decision_boundary draws at most {MAX_ALL_PAIRS} classes, got {len(classes)}"
-            )
         gcol = _one_column(points, group).to_numpy()
         for i, cls in enumerate(classes):
             m = gcol == cls
@@ -273,14 +269,10 @@ def plot_error_curves(
 
     Raises:
         ConventionError: ``curves`` is not a DataFrame.
-        ValueError: more than ``MAX_SERIES`` curves, an unknown ``select``, or ``"1se"`` without ``se``.
+        ValueError: an unknown ``select``, or ``"1se"`` without ``se``.
     """
     if not isinstance(curves, pd.DataFrame):
         raise convention_error("plot_error_curves", "D", curves)
-    if curves.shape[1] > MAX_SERIES:
-        raise ValueError(
-            f"plot_error_curves draws at most {MAX_SERIES} curves, got {curves.shape[1]}"
-        )
     if rule not in ("min", "1se"):
         raise ValueError(f"rule must be 'min' or '1se', got {rule!r}")
     st = _style.get_style()
@@ -367,13 +359,11 @@ def plot_roc(
 
     Raises:
         ValueError: labels that are not 0 / 1 or have one class, a length mismatch, an unknown
-            ``curve``, or more than ``MAX_SERIES`` models.
+            ``curve``.
     """
     if curve not in ("roc", "pr"):
         raise ValueError(f"curve must be 'roc' or 'pr', got {curve!r}")
     models = pick(as_series_dict(scores, _caller="plot_roc"))
-    if len(models) > MAX_SERIES:
-        raise ValueError(f"plot_roc draws at most {MAX_SERIES} models, got {len(models)}")
     y = np.asarray(y_true, dtype=float)
     st = _style.get_style()
     fig = go.Figure()
