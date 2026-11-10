@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Literal
 
+import numpy as np
 import plotly.graph_objects as go
 import plotly.io as pio
 
@@ -66,12 +67,18 @@ _DIVERGING_HUES = (255.0, 50.0)  # blue ↔ orange; the first pole is the "low" 
 
 
 def _sequential(dark: bool, steps: int = 9) -> tuple[str, ...]:
-    """One hue, monotonic lightness. Light mode: pale → deep. Dark mode: deep → bright."""
-    lo, hi = (0.24, 0.86) if dark else (0.97, 0.36)
+    """One hue, monotonic lightness. Light mode: pale → deep. Dark mode: deep → bright.
+
+    Chroma peaks mid-ramp but stays clearly blue at the deep (light mode) or bright (dark mode)
+    end, so the extreme cells read as "a lot of blue", not as grey.
+    """
+    lo, hi = (0.24, 0.84) if dark else (0.97, 0.38)
+    anchors_t = (0.0, 0.5, 1.0)
+    anchors_c = (0.04, 0.15, 0.10) if dark else (0.02, 0.15, 0.11)
     out = []
     for i in range(steps):
         t = i / (steps - 1)
-        chroma = 0.14 * (1 - abs(2 * t - 1) ** 2.2) + 0.02
+        chroma = float(np.interp(t, anchors_t, anchors_c))
         out.append(_color.oklch_to_hex(lo + (hi - lo) * t, chroma, _SEQUENTIAL_HUE))
     return tuple(out)
 
@@ -328,9 +335,19 @@ def marker(i: int, *, size: float = 8) -> dict[str, object]:
     return {"symbol": shape + fill, "size": size, "color": color(i)}
 
 
-def sequential_scale() -> list[list[object]]:
-    """Plotly colorscale for the current sequential ramp (one hue, pale → deep)."""
+def sequential_scale(start: float = 0.0) -> list[list[object]]:
+    """Plotly colorscale for the current sequential ramp (one hue, pale → deep).
+
+    Args:
+        start: Position in [0, 1) at which to start the ramp. Lines need a start above 0, since
+            the lowest step is close to the surface colour and would vanish.
+    """
     seq = _current.sequential
+    if start > 0:
+        n = len(seq)
+        positions = np.linspace(start, 1.0, n)
+        pick = [seq[min(n - 1, round(p * (n - 1)))] for p in positions]
+        return [[i / (n - 1), c] for i, c in enumerate(pick)]
     return [[i / (len(seq) - 1), c] for i, c in enumerate(seq)]
 
 

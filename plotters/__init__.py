@@ -31,6 +31,7 @@ from .frames import (
 )
 from .io import save_html, save_png
 from .layout import apply_log, finish, log_ticks
+from .matrices import plot_contours, plot_correlation, plot_matrix, plot_table_heatmap
 from .notebook import autoshow, show, show_all
 from .stats import (
     acf_values,
@@ -69,6 +70,10 @@ except PackageNotFoundError:  # running from a source tree that is not installed
     __version__ = "0.0.0"
 
 __all__ = [
+    "plot_contours",
+    "plot_correlation",
+    "plot_matrix",
+    "plot_table_heatmap",
     "plot_acf",
     "plot_acf_grid",
     "plot_box",

@@ -11,7 +11,7 @@ from plotly.offline import get_plotlyjs
 
 import plotters as pl
 
-from . import cards_analysis, cards_core, cards_distributions  # noqa: F401  (registers cards)
+from . import cards_analysis, cards_core, cards_distributions, cards_matrices  # noqa: F401  (registers cards)
 from .palette_page import page_section
 from .registry import CARDS, Card
 
