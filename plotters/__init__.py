@@ -17,6 +17,7 @@ from .categorical import (
     plot_grouped_bars,
     plot_line_band,
     plot_lollipop,
+    plot_pareto,
     plot_regression,
     plot_scatter_matrix,
     plot_waterfall,
@@ -111,7 +112,7 @@ from .timeseries import (
     plot_series,
     plot_stacked,
 )
-from .views import annotate_views, plot_views
+from .views import annotate_views, plot_grid, plot_views
 
 try:
     __version__ = version("plotters")
@@ -119,6 +120,8 @@ except PackageNotFoundError:  # running from a source tree that is not installed
     __version__ = "0.0.0"
 
 __all__ = [
+    "plot_grid",
+    "plot_pareto",
     "partial_dependence",
     "plot_coefficient_path",
     "plot_confusion",

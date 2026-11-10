@@ -6,15 +6,17 @@ Use this when the views differ in annotations, shapes or axes. For subsets of th
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import re
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from . import style as _style
 from .layout import HEIGHT, finish
 
-__all__ = ["plot_views", "annotate_views"]
+__all__ = ["plot_views", "annotate_views", "plot_grid"]
 
 _CARTESIAN = {
     "scatter", "scattergl", "bar", "histogram", "box", "heatmap", "contour", "histogram2d",
@@ -214,3 +216,135 @@ def annotate_views(fig: go.Figure, texts: Mapping[str, str]) -> go.Figure:
     first = new_buttons[0]["args"][1]["annotations"]
     fig.layout.annotations = first
     return fig
+
+
+def _axis_props(fig: go.Figure, axis: str) -> dict[str, Any]:
+    """The axis settings worth carrying into a grid panel (keyword form for ``update_xaxes``)."""
+    ax = fig.layout[f"{axis}axis"]
+    props: dict[str, Any] = {"title_text": ax.title.text or ""}
+    for key in ("type", "tickformat", "ticksuffix", "tickprefix", "dtick", "categoryorder"):
+        if ax[key] is not None:
+            props[key] = ax[key]
+    if ax.range is not None:
+        props["range"] = list(ax.range)
+    if ax.autorange == "reversed":
+        props["autorange"] = "reversed"
+    if ax.tickvals is not None:
+        props.update(tickmode="array", tickvals=list(ax.tickvals))
+        if ax.ticktext is not None:
+            props["ticktext"] = list(ax.ticktext)
+    if ax.categoryarray is not None:
+        props["categoryarray"] = list(ax.categoryarray)
+    return props
+
+
+def _remap(ref: str | None, axis_id: str, letter: str) -> str | None:
+    """Point a shape / annotation reference ('x', 'x domain', 'paper') at one grid panel's axis."""
+    if ref is None:
+        return None
+    if ref == "paper":
+        return f"{axis_id} domain"
+    if ref.startswith(letter):
+        return axis_id + ref[len(letter) :]
+    return ref
+
+
+def plot_grid(
+    figures: Mapping[str, go.Figure] | Sequence[go.Figure],
+    title: str = "",
+    subtitle: str = "",
+    *,
+    ncols: int = 2,
+    panel_height: int = 320,
+    shared_x: bool = False,
+    shared_y: bool = False,
+    legend: bool | None = None,
+) -> go.Figure:
+    """Arrange finished figures side by side in one grid, each keeping its own axes.
+
+    The static counterpart of :func:`plot_views` (which swaps figures with a dropdown). Traces, axis
+    titles and scales, shapes and annotations are carried into each panel. A legend entry is shown
+    once per name, so the same series in several panels is not listed repeatedly.
+
+    Cartesian figures only: existing menus, sliders, animation frames and non-Cartesian traces
+    raise rather than being half-copied.
+
+    Args:
+        figures: ``{panel title: Figure}``, or a list of figures (each figure's own title becomes
+            its panel title).
+        title: Title of the whole grid.
+        subtitle: Muted line under the title.
+        ncols: Panels per row.
+        panel_height: Height of one panel row in px.
+        shared_x: Share the x axis across panels.
+        shared_y: Share the y axis across panels.
+        legend: ``None`` shows the legend when any named trace asks for one.
+
+    Returns:
+        One figure containing every panel.
+
+    Raises:
+        ValueError: no figures, or a figure that is not plain Cartesian.
+
+    Example:
+        >>> pl.plot_grid({"Raw": raw, "Normalised": normalised}, ncols=2)
+    """
+    items = (
+        list(figures.items())
+        if isinstance(figures, Mapping)
+        else [
+            (
+                re.sub(r"<[^>]+>", "", (f.layout.title.text or "").split("<br>")[0])
+                or f"Panel {i + 1}",
+                f,
+            )
+            for i, f in enumerate(figures)
+        ]
+    )
+    if not items:
+        raise ValueError("plot_grid needs at least one figure")
+    for name, fig in items:
+        _check_cartesian(name, fig)
+    rows = -(-len(items) // ncols)
+    st = _style.get_style()
+    grid = make_subplots(rows=rows, cols=min(ncols, len(items)), subplot_titles=[n for n, _ in items],
+                         horizontal_spacing=0.07, vertical_spacing=min(0.16, 0.7 / rows),
+                         shared_xaxes=shared_x, shared_yaxes=shared_y)  # fmt: skip
+    grid.update_annotations(font={"size": 11, "color": st.ink_2})  # the panel titles
+    seen: set[str] = set()
+    for k, (_, fig) in enumerate(items):
+        r, c = k // ncols + 1, k % ncols + 1
+        xid, yid = ("x" if k == 0 else f"x{k + 1}"), ("y" if k == 0 else f"y{k + 1}")
+        for trace in _traces(fig):
+            copy = go.Figure(trace).data[0]
+            name = getattr(copy, "name", None)
+            if name:
+                if name in seen:
+                    copy.showlegend = False
+                seen.add(name)
+            grid.add_trace(copy, row=r, col=c)
+        grid.update_xaxes(row=r, col=c, **_axis_props(fig, "x"))
+        grid.update_yaxes(row=r, col=c, **_axis_props(fig, "y"))
+        for shape in fig.layout.shapes:
+            data = shape.to_plotly_json()
+            data["xref"], data["yref"] = (
+                _remap(data.get("xref"), xid, "x"),
+                _remap(data.get("yref"), yid, "y"),
+            )
+            grid.add_shape(data)
+        for note in fig.layout.annotations:
+            data = note.to_plotly_json()
+            data["xref"], data["yref"] = (
+                _remap(data.get("xref"), xid, "x"),
+                _remap(data.get("yref"), yid, "y"),
+            )
+            grid.add_annotation(data)
+    show = (
+        legend
+        if legend is not None
+        else any(
+            getattr(t, "showlegend", None) is not False and getattr(t, "name", None)
+            for t in _traces(grid)
+        )
+    )
+    return finish(grid, title, subtitle, height=max(HEIGHT, 140 + panel_height * rows), legend=show)

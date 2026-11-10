@@ -60,6 +60,23 @@ def _log_bounds(values: np.ndarray, caller: str, axis: str) -> tuple[float, floa
     return float(finite.min()) / 1.25, float(finite.max()) * 1.25
 
 
+def _bubble_sizes(
+    values: np.ndarray, caller: str, column: str, largest: float = 30.0
+) -> np.ndarray:
+    """Marker diameters in px so that the *area* is proportional to the value.
+
+    Area, not diameter, is what the eye reads: doubling a value should double the area. The
+    smallest visible marker is 4 px, so a tiny value does not vanish.
+    """
+    finite = values[np.isfinite(values)]
+    if finite.size and (finite < 0).any():
+        raise ValueError(f"{caller}: size={column!r} has negative values; area cannot be negative")
+    top = float(finite.max()) if finite.size else 0.0
+    if top <= 0:
+        return np.full(values.shape, 4.0)
+    return np.maximum(4.0, largest * np.sqrt(np.nan_to_num(values) / top))
+
+
 def _bool_pair(flag: bool | tuple[bool, bool], caller: str) -> tuple[bool, bool]:
     if isinstance(flag, bool):
         return flag, flag
@@ -97,6 +114,7 @@ def plot_scatter(
     *,
     group: str | None = None,
     label: str | None = None,
+    size: str | None = None,
     diagonal: bool = False,
     logx: bool = False,
     logy: bool = False,
@@ -104,7 +122,7 @@ def plot_scatter(
     ylabel: str | None = None,
     height: int = HEIGHT,
 ) -> go.Figure:
-    """Two columns against each other, optionally split by group or annotated by label.
+    """Two columns against each other, optionally split by group, annotated by label, or sized.
 
     ``group=`` and ``label=`` are different things and easy to swap::
 
@@ -119,6 +137,8 @@ def plot_scatter(
         subtitle: Muted line under the title.
         group: Column whose values each become one coloured series (at most 3 values).
         label: Column written next to each point.
+        size: Non-negative numeric column that sets each marker's **area** (a bubble chart). The
+            default subtitle says so.
         diagonal: Draw ``y = x``.
         logx: Logarithmic x axis (needs positive values).
         logy: Logarithmic y axis.
@@ -132,8 +152,11 @@ def plot_scatter(
         ValueError: more than 3 groups, a non-numeric axis column, or a log axis with
             non-positive values.
     """
-    _require_columns(frame, "plot_scatter", x=x, y=y, group=group, label=label)
+    _require_columns(frame, "plot_scatter", x=x, y=y, group=group, label=label, size=size)
     xs, ys = _numeric(frame, x, "plot_scatter"), _numeric(frame, y, "plot_scatter")
+    sizes = (
+        _bubble_sizes(_numeric(frame, size, "plot_scatter"), "plot_scatter", size) if size else None
+    )
     st = _style.get_style()
     fig = go.Figure()
     parts: list[tuple[str, pd.Index]] = [("", frame.index)]
@@ -144,10 +167,20 @@ def plot_scatter(
     for i, (name, idx) in enumerate(parts):
         mask = frame.index.isin(idx)
         text = _one_column(frame, label).astype(str).to_numpy()[mask] if label else None
+        marker = {
+            **_style.marker(i, size=_MARKER_SIZE),
+            "color": _style.color(i) if group else st.accent,
+        }
+        if sizes is not None:
+            marker.update(
+                size=sizes[mask],
+                sizemode="diameter",
+                opacity=0.7,
+                line={"width": 1, "color": st.surface},
+            )
         fig.add_scatter(
             x=xs[mask], y=ys[mask], mode="markers+text" if label else "markers", name=name,
-            marker={**_style.marker(i, size=_MARKER_SIZE), "color": _style.color(i) if group else st.accent},
-            text=text, textposition="top right", textfont={"size": 10, "color": st.muted},
+            marker=marker, text=text, textposition="top right", textfont={"size": 10, "color": st.muted},
             showlegend=group is not None,
         )  # fmt: skip
     if diagonal:
@@ -158,7 +191,8 @@ def plot_scatter(
         apply_log(fig, "x", *_log_bounds(xs, "plot_scatter", "x"))
     if logy:
         apply_log(fig, "y", *_log_bounds(ys, "plot_scatter", "y"))
-    return finish(fig, title, subtitle, xlabel=xlabel or x, ylabel=ylabel or y, height=height,
+    note = f"marker area is proportional to {size}" if size else ""
+    return finish(fig, title, subtitle or note, xlabel=xlabel or x, ylabel=ylabel or y, height=height,
                   legend=group is not None)  # fmt: skip
 
 
@@ -171,6 +205,7 @@ def plot_shaded_scatter(
     subtitle: str = "",
     *,
     label: str | None = None,
+    size: str | None = None,
     log_shade: bool = False,
     reference: float | None = None,
     logx: bool = False,
@@ -192,6 +227,8 @@ def plot_shaded_scatter(
         title: Figure title.
         subtitle: Muted line under the title.
         label: Column written next to each point.
+        size: Non-negative numeric column that sets each marker's area, so one chart carries four
+            variables (x, y, colour and size).
         log_shade: Colour by ``log10(shade)`` for a geometric ratio (needs positive values);
             the colourbar is still labelled in data units.
         reference: A shade value that is "neutral" (such as 1.0 for a ratio). Switches to the
@@ -207,7 +244,7 @@ def plot_shaded_scatter(
             values.
     """
     caller = "plot_shaded_scatter"
-    _require_columns(frame, caller, x=x, y=y, shade=shade, label=label)
+    _require_columns(frame, caller, x=x, y=y, shade=shade, label=label, size=size)
     xs, ys, sh = (
         _numeric(frame, x, caller),
         _numeric(frame, y, caller),
@@ -221,7 +258,9 @@ def plot_shaded_scatter(
         values = np.log10(sh)
     cmin, cmax = float(np.nanmin(values)), float(np.nanmax(values))
     marker: dict[str, object] = {
-        "size": _MARKER_SIZE + 1,
+        "size": _bubble_sizes(_numeric(frame, size, caller), caller, size)
+        if size
+        else _MARKER_SIZE + 1,
         "color": values,
         "line": {"width": 0.6, "color": st.surface},
     }

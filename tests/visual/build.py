@@ -22,6 +22,7 @@ from . import (  # noqa: F401  (registers cards)
     cards_forecasting,
     cards_learning,
     cards_matrices,
+    cards_small,
     cards_static,
 )
 from .palette_page import page_section

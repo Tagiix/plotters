@@ -67,7 +67,7 @@ Convert between shapes with `long_to_wide`, `group_values`, `as_series_dict`, `a
 
 | Function | For |
 |---|---|
-| `plot_series` | One line per series: the workhorse. `percent`, `logy`, `logx`, `slider`, `fill`, `bands` (horizontal reference lines), `markers` (vertical), `views` (dropdown over named subsets), `max_visible` |
+| `plot_series` | One line per series: the workhorse. `percent`, `logy`, `logx`, `slider`, `fill`, `step`, `bands` (horizontal reference lines), `markers` (vertical lines), `spans` (shaded vertical bands such as a recession or outage), `views` (dropdown over named subsets), `max_visible` |
 | `plot_bars_with_line` | Realised as bars, prediction as lines on one axis. Did it track or lag? |
 | `plot_cumulative` | Wealth curve from per-period values; `compound=True` for reinvested |
 | `plot_drawdown` | Drop from the running peak, filled because the area *is* the quantity |
@@ -98,9 +98,20 @@ A pooled **distribution** and a pooled **path** are different quantities: the hi
 
 Histogram limits (`hist_range`) never erase tail probability: values outside the window stay in the density denominator. `normal_reference=True` overlays N(0, 1), not a fitted normal.
 
-### Figure views: `views`
+### Multiple views: `views`
 
-`plot_views({"Raw": fig_a, "Normalised": fig_b})` merges prepared figures into one with a dropdown; traces, axes, annotations, shapes and legend switch together. `annotate_views(fig, {view: text})` adds a top-right annotation that changes with the dropdown. Cartesian figures only; existing menus, sliders, frames and non-Cartesian traces raise rather than silently losing interactions.
+Four ways to show several things, depending on what differs between them:
+
+| You want | Use |
+|---|---|
+| A dropdown over **subsets of the same lines** | `plot_series(..., views={"A": [...], "B": [...]})` |
+| A dropdown over **different figures** (their own axes, annotations, shapes) | `plot_views({"Raw": fig_a, "Normalised": fig_b})` |
+| A **changing note** (n, a statistic) that follows the dropdown | `annotate_views(fig, {view: text})` |
+| Everything visible **at once**, side by side | `plot_grid({"Raw": fig_a, "Normalised": fig_b}, ncols=2)` |
+
+`analyze_series` and `plot_series_distribution` already give one dropdown view per series plus a pooled one.
+
+`plot_views` merges prepared figures into one; traces, axes, annotations, shapes and the legend switch together, and the first view opens initially. `plot_grid` is the static counterpart: each figure keeps its own axes, titles, shapes and annotations in its own panel, and a series name shared by several panels is listed in the legend once. Both are Cartesian-only: existing menus, sliders, frames and non-Cartesian traces raise rather than silently losing their interactions.
 
 ### Distributions: `distributions`
 
@@ -169,8 +180,8 @@ Cell text is coloured from the **measured luminance** of each fill, never from a
 | `plot_box_series` | A box at each numeric `x`, medians joined into a curve per group |
 | `plot_small_multiples` | One panel per value of `panel`, shared legend |
 | `plot_paired_difference` | Cumulative difference against a baseline series (`base` names a series) |
-| `plot_scatter` | Two columns, optional `y = x` diagonal |
-| `plot_shaded_scatter` | Two columns plus a continuous third as colour, with a colourbar |
+| `plot_scatter` | Two columns, optional `y = x` diagonal, `size=` for a bubble chart (marker **area** tracks the value) |
+| `plot_shaded_scatter` | Two columns plus a continuous third as colour, with a colourbar; `size=` adds a fourth variable |
 | `plot_interval` | One horizontal interval per row; intervals crossing `reference` are hollow (not separable) |
 | `plot_density2d` | A binned density for scatters with many points: the plane cut into cells shaded by count (log-scaled by default), empty cells blank |
 
@@ -182,9 +193,10 @@ Cell text is coloured from the **measured luminance** of each fill, never from a
 
 | Function | For |
 |---|---|
-| `plot_bars` | Bars from a `{label: number}` dict or a Series, value written at each tip. `sort`, `top`, `normalize` |
+| `plot_bars` | Bars from a `{label: number}` dict or a Series, value written at each tip. `sort`, `top`, `normalize`, `error=` (symmetric, or a `(minus, plus)` pair) |
+| `plot_pareto` | Causes ranked by share with the running total and an 80% line; `top=` folds the tail into "Other" |
 | `plot_counts` | `value_counts` and the bars in one call |
-| `plot_grouped_bars` | A few series across categories; `stacked`, `normalize` |
+| `plot_grouped_bars` | A few series across categories; `stacked`, `normalize`, `error=` |
 | `plot_lollipop` | Stems and dots: less ink, good for many categories or negative values |
 | `plot_dumbbell` | Before and after per item |
 | `plot_waterfall` | Contributions adding up to a total |

@@ -23,6 +23,7 @@ from .layout import HEIGHT, finish
 
 __all__ = [
     "plot_bars",
+    "plot_pareto",
     "plot_counts",
     "plot_grouped_bars",
     "plot_lollipop",
@@ -58,6 +59,10 @@ def plot_bars(
     top: int | None = None,
     horizontal: bool = True,
     normalize: bool = False,
+    error: Mapping[str, float]
+    | pd.Series
+    | tuple[Mapping[str, float], Mapping[str, float]]
+    | None = None,
     reference: float | None = None,
     fmt: str = ",.4g",
     xlabel: str = "",
@@ -79,6 +84,10 @@ def plot_bars(
         top: Keep only the first ``top`` bars after sorting.
         horizontal: Horizontal bars with the first label at the top; ``False`` for vertical.
         normalize: Show each value as a share of the total (percent).
+        error: Error bars: a ``{label: half-width}`` dict or Series for a symmetric bar, or a
+            ``(minus, plus)`` pair of them for an asymmetric one (such as a confidence interval).
+            Every bar needs an entry. The values are then written inside the bars so they do not
+            collide with the whiskers.
         reference: Draw a line at this value.
         fmt: Python format spec for the written values (ignored when ``normalize``).
         xlabel: X axis title.
@@ -87,21 +96,40 @@ def plot_bars(
 
     Raises:
         ConventionError: ``data`` is not a dict or Series (a DataFrame is refused).
-        ValueError: non-numeric values, or ``normalize`` with a zero total.
+        KeyError: ``error`` lacks a label that ``data`` has.
+        ValueError: non-numeric values, negative errors, or ``normalize`` with a zero total.
     """
     s = as_value_series(data)
+    total = float(s.sum())
     if normalize:
-        if s.sum() == 0:
+        if total == 0:
             raise ValueError("cannot normalise: the total is zero")
-        s = s / s.sum()
+        s = s / total
     s = _ordered(s, sort, top)
     st = _style.get_style()
+    minus = plus = None
+    if error is not None:
+        pair = error if isinstance(error, tuple) else (error, error)
+        scale = total if normalize else 1.0
+        minus, plus = ((as_value_series(e).reindex(s.index) / scale) for e in pair)
+        if minus.isna().any() or plus.isna().any():
+            missing = [str(k) for k in s.index[minus.isna() | plus.isna()]]
+            raise KeyError(f"error has no entry for {missing}")
+        if (minus < 0).any() or (plus < 0).any():
+            raise ValueError("error bars cannot be negative")
     text = [format(v, ".1%" if normalize else fmt) for v in s]
     common = dict(
         marker={"color": _color.with_alpha(st.accent, 0.85), "line": {"width": 0}},
-        text=text, textposition="outside", cliponaxis=False, textfont={"size": 11, "color": st.ink_2},
-        showlegend=False,
+        text=text, textposition="inside" if minus is not None else "outside", cliponaxis=False,
+        textfont={"size": 11, "color": st.ink_2}, showlegend=False,
     )  # fmt: skip
+    if minus is not None and plus is not None:
+        from .matrices import cell_ink
+
+        common.update(insidetextanchor="start", textfont={"size": 11, "color": cell_ink(st.accent)})
+        bar_error = {"type": "data", "symmetric": False, "array": plus.to_numpy(), "arrayminus": minus.to_numpy(),
+                     "color": st.ink_2, "thickness": 1.5, "width": 5}  # fmt: skip
+        common["error_x" if horizontal else "error_y"] = bar_error
     fig = go.Figure(go.Bar(x=s.to_numpy(), y=list(s.index), orientation="h", **common) if horizontal
                     else go.Bar(x=list(s.index), y=s.to_numpy(), **common))  # fmt: skip
     if reference is not None:
@@ -152,6 +180,7 @@ def plot_grouped_bars(
     *,
     stacked: bool = False,
     normalize: bool = False,
+    error: pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame] | None = None,
     horizontal: bool = False,
     xlabel: str = "",
     ylabel: str = "",
@@ -165,6 +194,9 @@ def plot_grouped_bars(
         subtitle: Muted line under the title.
         stacked: Stack the series instead of placing them side by side.
         normalize: Stack to 100% so each category shows shares (implies ``stacked``).
+        error: Error bars: a DataFrame of half-widths with the same index and columns as ``frame``,
+            or a ``(minus, plus)`` pair of them. Not available with ``normalize`` or ``stacked``,
+            where a whisker would not mean one thing.
         horizontal: Horizontal bars with the first category at the top.
         xlabel: X axis title.
         ylabel: Y axis title.
@@ -183,12 +215,29 @@ def plot_grouped_bars(
     stack = stacked or normalize
     if stack and (frame.to_numpy(dtype=float) < 0).any():
         raise ValueError("stacked bars need non-negative values")
+    if error is not None and stack:
+        raise ValueError("error bars are not available for stacked or normalised bars")
+    minus = plus = None
+    if error is not None:
+        minus, plus = error if isinstance(error, tuple) else (error, error)
+        for e in (minus, plus):
+            if not (e.index.equals(frame.index) and e.columns.equals(frame.columns)):
+                raise ValueError("error must have the same index and columns as frame")
+            if (e.to_numpy(dtype=float) < 0).any():
+                raise ValueError("error bars cannot be negative")
     cats = [str(i) for i in frame.index]
     shown = frame.div(frame.sum(axis=1).replace(0, np.nan), axis=0) if normalize else frame
     fig = go.Figure()
     for i, col in enumerate(frame.columns):
         v = shown[col].to_numpy(dtype=float)
-        fig.add_bar(name=str(col), marker={"color": _style.color(i), "line": {"width": 0}},
+        whisker: dict[str, object] = {}
+        if minus is not None and plus is not None:
+            whisker["error_x" if horizontal else "error_y"] = {
+                "type": "data", "symmetric": False, "array": plus[col].to_numpy(dtype=float),
+                "arrayminus": minus[col].to_numpy(dtype=float), "color": _style.get_style().ink_2,
+                "thickness": 1.4, "width": 4,
+            }  # fmt: skip
+        fig.add_bar(name=str(col), marker={"color": _style.color(i), "line": {"width": 0}}, **whisker,
                     **({"x": v, "y": cats, "orientation": "h"} if horizontal else {"x": cats, "y": v}))  # fmt: skip
     fig.update_layout(barmode="relative" if stack else "group")
     if normalize:
@@ -581,3 +630,62 @@ def plot_calendar_heatmap(
     fig.update_yaxes(autorange="reversed", showgrid=False, type="category")
     fig.update_xaxes(showgrid=False, tickformat="%b", dtick="M1")
     return finish(fig, title, subtitle, height=height, legend=False)
+
+
+def plot_pareto(
+    data: Mapping[str, float] | pd.Series,
+    title: str = "",
+    subtitle: str = "",
+    *,
+    top: int | None = None,
+    other: str = "Other",
+    threshold: float | None = 0.8,
+    xlabel: str = "",
+    height: int = HEIGHT,
+) -> go.Figure:
+    """A Pareto chart: causes ranked by size with the running share of the total.
+
+    Bars are each cause's share of the total, largest first, and the line is the cumulative share,
+    so you can see how few causes account for most of the total. Both are shares, so they share one
+    axis (the classic two-axis version is deliberately not offered).
+
+    Args:
+        data: ``{label: non-negative number}`` or a Series indexed by label (``value_counts()``).
+        title: Figure title.
+        subtitle: Muted line under the title.
+        top: Show this many causes and fold the rest into one bar named ``other``.
+        other: Label of the folded bar.
+        threshold: Draw a dotted line at this cumulative share (80% for the "80/20" reading);
+            ``None`` for none.
+        xlabel: X axis title.
+        height: Figure height in px.
+
+    Raises:
+        ConventionError: ``data`` is not a dict or Series.
+        ValueError: negative values or a zero total.
+    """
+    s = as_value_series(data)
+    if (s < 0).any():
+        raise ValueError("plot_pareto needs non-negative values")
+    total = float(s.sum())
+    if total == 0:
+        raise ValueError("cannot rank: the total is zero")
+    s = s.sort_values(ascending=False, kind="stable")
+    if top is not None and len(s) > top:
+        s = pd.concat([s.head(top), pd.Series({other: float(s.iloc[top:].sum())})])
+    shares = s / total
+    st = _style.get_style()
+    labels = list(shares.index)
+    fig = go.Figure(go.Bar(x=labels, y=shares.to_numpy(), name="share", showlegend=False,
+                           marker={"color": _color.with_alpha(st.accent, 0.85), "line": {"width": 0}},
+                           text=[format(v, ".0%") for v in shares], textposition="outside", cliponaxis=False,
+                           textfont={"size": 10, "color": st.ink_2}))  # fmt: skip
+    fig.add_scatter(x=labels, y=np.cumsum(shares.to_numpy()), mode="lines+markers", name="cumulative share",
+                    line={"color": _style.color(1), "width": 2}, marker=_style.marker(1, size=6))  # fmt: skip
+    if threshold is not None:
+        fig.add_hline(y=threshold, line={"color": st.muted, "width": 1, "dash": "dot"})
+    fig.update_xaxes(type="category", showgrid=False)
+    fig.update_yaxes(tickformat=".0%", range=[0, 1.08])
+    return finish(
+        fig, title, subtitle, xlabel=xlabel, ylabel="share of total", height=height, legend=True
+    )

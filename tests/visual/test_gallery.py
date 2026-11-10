@@ -15,6 +15,7 @@ from . import (  # noqa: F401  (registers the cards)
     cards_forecasting,
     cards_learning,
     cards_matrices,
+    cards_small,
     cards_static,
 )
 from .registry import CARDS

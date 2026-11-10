@@ -94,8 +94,19 @@ def _add_reference_lines(
     markers: Mapping[str, Any] | None,
     logy: bool,
     logx: bool,
+    spans: Mapping[str, tuple[Any, Any]] | None = None,
 ) -> None:
     st = _style.get_style()
+    for label, (start, end) in (spans or {}).items():
+        fig.add_shape(
+            type="rect", xref="x", x0=start, x1=end, yref="paper", y0=0, y1=1, layer="below",
+            fillcolor=_color.with_alpha(st.muted, 0.14), line={"width": 0},
+        )  # fmt: skip
+        fig.add_annotation(
+            xref="x", x=math.log10(start) if logx else start, xanchor="left", yref="paper", y=1,
+            yanchor="top", text=label, showarrow=False, xshift=4,
+            font={"size": 10, "color": st.muted},
+        )  # fmt: skip
     # Shapes take data units on a log axis, but annotations take log10 (checked on plotly 7.1).
     for label, y in (bands or {}).items():
         fig.add_shape(
@@ -164,6 +175,8 @@ def plot_series(
     fill: bool = False,
     bands: Mapping[str, float] | None = None,
     markers: Mapping[str, Any] | None = None,
+    spans: Mapping[str, tuple[Any, Any]] | None = None,
+    step: bool = False,
     views: Mapping[str, Sequence[str]] | None = None,
     max_visible: int = MAX_VISIBLE,
     xlabel: str = "",
@@ -189,6 +202,10 @@ def plot_series(
         fill: Fill each line down to zero.
         bands: ``{label: y}`` horizontal reference lines. Scalars, not series.
         markers: ``{label: x}`` vertical reference lines, e.g. events.
+        spans: ``{label: (start, end)}`` shaded vertical bands behind the lines, e.g. a recession
+            or an outage window. Drawn below the data so the lines stay readable.
+        step: Draw each series as a step function (the value holds until the next observation)
+            instead of joining points with straight lines.
         views: ``{view_name: [series names]}``. Adds a dropdown at the top left that swaps
             between named subsets of the series already passed. Every series is drawn once
             and the menu toggles ``visible``, so an exported HTML keeps working with no
@@ -225,13 +242,14 @@ def plot_series(
             name=str(name),
             mode="lines",
             line=line,
+            line_shape="hv" if step else "linear",
             visible=first[i],
         )
         if fill:
             trace.update(fill="tozeroy", fillcolor=_color.with_alpha(line["color"], 0.12))  # type: ignore[arg-type]
         fig.add_trace(trace)
 
-    _add_reference_lines(fig, bands, markers, logy, logx)
+    _add_reference_lines(fig, bands, markers, logy, logx, spans)
 
     if views:
         fig.update_layout(
