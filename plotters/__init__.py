@@ -9,6 +9,16 @@ from importlib.metadata import PackageNotFoundError, version
 from ._errors import ConventionError
 from ._types import MAX_ALL_PAIRS, MAX_SERIES, MAX_VISIBLE, SeriesLike
 from .analysis import analyze_series, compare_series, plot_series_distribution
+from .comparisons import (
+    plot_box_series,
+    plot_interval,
+    plot_paired_difference,
+    plot_rank_heatmap,
+    plot_scatter,
+    plot_shaded_scatter,
+    plot_small_multiples,
+    plot_tradeoff,
+)
 from .correlogram import plot_acf, plot_acf_grid
 from .distributions import (
     plot_box,
@@ -70,6 +80,14 @@ except PackageNotFoundError:  # running from a source tree that is not installed
     __version__ = "0.0.0"
 
 __all__ = [
+    "plot_box_series",
+    "plot_interval",
+    "plot_paired_difference",
+    "plot_rank_heatmap",
+    "plot_scatter",
+    "plot_shaded_scatter",
+    "plot_small_multiples",
+    "plot_tradeoff",
     "plot_contours",
     "plot_correlation",
     "plot_matrix",
