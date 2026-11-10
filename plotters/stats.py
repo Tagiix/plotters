@@ -500,9 +500,9 @@ def ccf_values(
             constant series.
     """
     if isinstance(x, pd.Series) and isinstance(y, pd.Series):
-        pair = pd.concat([x, y], axis=1, join="inner").astype(float)
-        pair = pair[np.isfinite(pair).all(axis=1)]
-        a, b = pair.iloc[:, 0].to_numpy(), pair.iloc[:, 1].to_numpy()
+        paired = pd.concat([x, y], axis=1, join="inner").to_numpy(dtype=float)
+        paired = paired[np.isfinite(paired).all(axis=1)]  # plain numpy: no pandas-stub ambiguity
+        a, b = paired[:, 0], paired[:, 1]
     else:
         a, b = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
         if a.shape != b.shape:

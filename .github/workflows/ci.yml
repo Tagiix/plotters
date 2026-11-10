@@ -8,6 +8,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false  # one failing Python version must not hide the others
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
