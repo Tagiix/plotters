@@ -63,6 +63,7 @@ def plot_bars(
     xlabel: str = "",
     ylabel: str = "",
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Bars from a ``{label: number}`` dict or a Series, with the value written at each tip.
 
@@ -88,6 +89,7 @@ def plot_bars(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height; grows with the number of bars by default.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``data`` is not a dict or Series (a DataFrame is refused).
@@ -138,7 +140,7 @@ def plot_bars(
     if normalize:
         (fig.update_xaxes if horizontal else fig.update_yaxes)(tickformat=".0%")
     return finish(fig, title, subtitle, xlabel=xlabel, ylabel=ylabel,
-                  height=height or (_row_height(len(s)) if horizontal else HEIGHT), legend=False)  # fmt: skip
+                  height=height or (_row_height(len(s)) if horizontal else HEIGHT), legend=False, width=width)  # fmt: skip
 
 
 def plot_counts(
@@ -155,6 +157,7 @@ def plot_counts(
     xlabel: str = "",
     ylabel: str = "",
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Count how often each value occurs and draw the counts as bars, in one call.
 
@@ -172,12 +175,13 @@ def plot_counts(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height; grows with the number of bars by default.
+        width: Figure width in px; ``None`` fills the container.
     """
     counts = pd.Series(list(values) if not isinstance(values, pd.Series) else values).value_counts(
         dropna=dropna, sort=False
     )
     return plot_bars(counts, title, subtitle, normalize=normalize, top=top, sort=sort, horizontal=horizontal,
-                     fmt=fmt, xlabel=xlabel, ylabel=ylabel, height=height)  # fmt: skip
+                     fmt=fmt, xlabel=xlabel, ylabel=ylabel, height=height, width=width)  # fmt: skip
 
 
 def plot_grouped_bars(
@@ -192,6 +196,7 @@ def plot_grouped_bars(
     xlabel: str = "",
     ylabel: str = "",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Compare a few series across categories: index = categories, columns = series.
 
@@ -208,6 +213,7 @@ def plot_grouped_bars(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``frame`` is not a DataFrame.
@@ -253,7 +259,9 @@ def plot_grouped_bars(
         fig.update_yaxes(autorange="reversed", type="category")
     else:
         fig.update_xaxes(type="category")
-    return finish(fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=True)
+    return finish(
+        fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=True, width=width
+    )
 
 
 def plot_lollipop(
@@ -267,6 +275,7 @@ def plot_lollipop(
     fmt: str = ",.4g",
     xlabel: str = "",
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """A stem and a dot per label: less ink than bars, clear for many categories or negatives.
 
@@ -280,6 +289,7 @@ def plot_lollipop(
         fmt: Format spec for the written values.
         xlabel: X axis title.
         height: Figure height; grows with the number of rows.
+        width: Figure width in px; ``None`` fills the container.
     """
     s = _ordered(as_value_series(data), sort, top)
     st = _style.get_style()
@@ -302,7 +312,13 @@ def plot_lollipop(
                     textposition="middle right", textfont={"size": 10, "color": st.ink_2})  # fmt: skip
     fig.update_yaxes(autorange="reversed", type="category", showgrid=False)
     return finish(
-        fig, title, subtitle, xlabel=xlabel, height=height or _row_height(len(s)), legend=False
+        fig,
+        title,
+        subtitle,
+        xlabel=xlabel,
+        height=height or _row_height(len(s)),
+        legend=False,
+        width=width,
     )
 
 
@@ -317,6 +333,7 @@ def plot_dumbbell(
     sort: bool = True,
     xlabel: str = "",
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Before and after per item, joined by a line: how far did each one move?
 
@@ -330,6 +347,7 @@ def plot_dumbbell(
         sort: Order items by the size of the move, largest first.
         xlabel: X axis title.
         height: Figure height; grows with the number of rows.
+        width: Figure width in px; ``None`` fills the container.
     """
     _require_columns(frame, "plot_dumbbell", label=label, start=start, end=end)
     names = _one_column(frame, label).astype(str).to_numpy()
@@ -357,7 +375,13 @@ def plot_dumbbell(
     fig.add_scatter(x=b, y=names, mode="markers", name=end, marker={"color": st.accent, "size": 10})
     fig.update_yaxes(autorange="reversed", type="category", showgrid=False)
     return finish(
-        fig, title, subtitle, xlabel=xlabel, height=height or _row_height(len(names)), legend=True
+        fig,
+        title,
+        subtitle,
+        xlabel=xlabel,
+        height=height or _row_height(len(names)),
+        legend=True,
+        width=width,
     )
 
 
@@ -370,6 +394,7 @@ def plot_waterfall(
     fmt: str = "+,.4g",
     ylabel: str = "",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """How contributions add up to a total, in the order given.
 
@@ -381,6 +406,7 @@ def plot_waterfall(
         fmt: Format spec for the written contributions.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
     """
     s = as_value_series(data)
     st = _style.get_style()
@@ -394,7 +420,7 @@ def plot_waterfall(
         text=[format(v, fmt) for v in s] + ([format(float(s.sum()), ",.4g")] if total else []),
         textposition="outside", textfont={"size": 11, "color": st.ink_2}, showlegend=False,
     ))  # fmt: skip
-    return finish(fig, title, subtitle, ylabel=ylabel, height=height, legend=False)
+    return finish(fig, title, subtitle, ylabel=ylabel, height=height, legend=False, width=width)
 
 
 def plot_pareto(
@@ -407,6 +433,7 @@ def plot_pareto(
     threshold: float | None = 0.8,
     xlabel: str = "",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """A Pareto chart: causes ranked by size with the running share of the total.
 
@@ -424,6 +451,7 @@ def plot_pareto(
             ``None`` for none.
         xlabel: X axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``data`` is not a dict or Series.
@@ -452,5 +480,12 @@ def plot_pareto(
     fig.update_xaxes(type="category", showgrid=False)
     fig.update_yaxes(tickformat=".0%", range=[0, 1.08])
     return finish(
-        fig, title, subtitle, xlabel=xlabel, ylabel="share of total", height=height, legend=True
+        fig,
+        title,
+        subtitle,
+        xlabel=xlabel,
+        ylabel="share of total",
+        height=height,
+        legend=True,
+        width=width,
     )

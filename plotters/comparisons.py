@@ -83,6 +83,7 @@ def plot_tradeoff(
     xlabel: str | None = None,
     ylabel: str | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Two competing objectives and the Pareto frontier: "you cannot have both".
 
@@ -109,6 +110,7 @@ def plot_tradeoff(
         xlabel: X axis title; defaults to the column name.
         ylabel: Y axis title; defaults to the column name.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: too many families, a non-numeric axis, or a malformed ``lower_is_better``.
@@ -170,7 +172,7 @@ def plot_tradeoff(
         apply_log(fig, "y", *_log_bounds(ys, caller, "y"))
     corner = f"{'lower' if lx else 'higher'} {x}, {'lower' if ly else 'higher'} {y} wins"
     return finish(fig, title, _sub(subtitle, f"{corner}; ringed points are the Pareto frontier"),
-                  xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=True)  # fmt: skip
+                  xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=True, width=width)  # fmt: skip
 
 
 def plot_rank_heatmap(
@@ -183,6 +185,7 @@ def plot_rank_heatmap(
     *,
     lower_is_better: bool = True,
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Items by contexts, coloured by **rank within each context**. No series cap.
 
@@ -199,6 +202,7 @@ def plot_rank_heatmap(
         subtitle: Muted line under the title.
         lower_is_better: Whether a lower value earns the better (lower) rank.
         height: Figure height; grows with the number of rows by default.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: duplicated (item, context) pairs.
@@ -243,6 +247,7 @@ def plot_rank_heatmap(
         sub,
         height=height or int(min(900, max(HEIGHT, 170 + 30 * len(ys)))),
         legend=False,
+        width=width,
     )
 
 
@@ -265,6 +270,7 @@ def plot_box_series(
     xlabel: str | None = None,
     ylabel: str | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """A box at each numeric ``x``, medians joined so each group reads as a curve.
 
@@ -288,6 +294,7 @@ def plot_box_series(
         xlabel: X axis title; defaults to the column name.
         ylabel: Y axis title; defaults to the column name.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: ``x`` is not numeric, or more than 8 groups.
@@ -303,8 +310,8 @@ def plot_box_series(
         )
     positions = np.unique(xs[np.isfinite(xs)])
     gap = float(np.min(np.diff(positions))) if positions.size > 1 else 1.0
-    width = gap * 0.8 / len(names)
-    step = width * 1.02
+    box_width = gap * 0.8 / len(names)
+    step = box_width * 1.02
     group_col = (
         _one_column(frame, group).astype(str).to_numpy() if group else np.full(len(frame), "")
     )
@@ -314,7 +321,7 @@ def plot_box_series(
         offset = (i - (len(names) - 1) / 2) * step
         color = _style.color(i)
         fig.add_trace(go.Box(
-            x=xs[mask] + offset, y=ys[mask], width=width * 0.92, name=name, legendgroup=name, showlegend=bool(group),
+            x=xs[mask] + offset, y=ys[mask], width=box_width * 0.92, name=name, legendgroup=name, showlegend=bool(group),
             boxpoints="all" if points else "outliers", pointpos=0, jitter=0.35,
             line={"color": color, "width": 1.4}, fillcolor=_color.with_alpha(color, 0.25),
             marker={"color": color, "size": 4, "opacity": 0.55},
@@ -339,6 +346,7 @@ def plot_box_series(
         ylabel=ylabel or y,
         height=height,
         legend=bool(group),
+        width=width,
     )
 
 
@@ -355,6 +363,7 @@ def plot_small_multiples(
     shared_y: bool = True,
     panel_height: int = 240,
     height: int | None = None,
+    width: int | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
 ) -> go.Figure:
@@ -375,6 +384,7 @@ def plot_small_multiples(
         shared_y: Share the y range across panels so they are comparable.
         panel_height: Height of one panel row in px.
         height: Total figure height in px; overrides the height computed from ``panel_height``.
+        width: Figure width in px; ``None`` fills the container.
         xlabel: X axis title; defaults to the column name.
         ylabel: Y axis title; defaults to the column name.
 
@@ -409,6 +419,7 @@ def plot_small_multiples(
         subtitle,
         height=height or max(HEIGHT, 140 + panel_height * rows),
         legend=bool(group),
+        width=width,
     )
 
 
@@ -422,6 +433,7 @@ def plot_paired_difference(
     xlabel: str = "",
     ylabel: str = "cumulative difference",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Cumulative difference against a baseline: steady slope, or one cliff?
 
@@ -438,6 +450,7 @@ def plot_paired_difference(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         KeyError: ``base`` is not one of the series.
@@ -461,7 +474,7 @@ def plot_paired_difference(
         fig.add_scatter(x=diff.index, y=diff.to_numpy(), mode="lines", name=str(name),
                         line={"color": _style.color(i), "width": 2})  # fmt: skip
     return finish(fig, title, _sub(subtitle, f"each series minus {base}, accumulated"), xlabel=xlabel,
-                  ylabel=ylabel, height=height, legend=len(others) > 1)  # fmt: skip
+                  ylabel=ylabel, height=height, legend=len(others) > 1, width=width)  # fmt: skip
 
 
 def plot_interval(
@@ -479,6 +492,7 @@ def plot_interval(
     lower_is_better: bool = True,
     xlabel: str | None = None,
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """One horizontal interval per row with a marker at ``point``: is the difference bigger than its own uncertainty?
 
@@ -500,6 +514,7 @@ def plot_interval(
         lower_is_better: Whether a lower ``point`` is better (decides which end is the top).
         xlabel: X axis title; defaults to ``point``.
         height: Figure height; grows with the number of rows by default.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: an interval has ``low > high``, or more than 8 groups.
@@ -560,7 +575,7 @@ def plot_interval(
         "hollow = interval crosses the reference (not separable)" if reference is not None else ""
     )
     return finish(fig, title, _sub(subtitle, note), xlabel=xlabel or point,
-                  height=height or int(min(900, max(260, 150 + 30 * len(frame)))), legend=bool(group))  # fmt: skip
+                  height=height or int(min(900, max(260, 150 + 30 * len(frame)))), legend=bool(group), width=width)  # fmt: skip
 
 
 def plot_bump(
@@ -573,6 +588,7 @@ def plot_bump(
     highlight: Sequence[str] | None = None,
     xlabel: str = "",
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """How the ranking of several items changes over time (a bump chart).
 
@@ -590,6 +606,7 @@ def plot_bump(
             out among many items.
         xlabel: X axis title.
         height: Figure height; grows with the number of items.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``frame`` is not a DataFrame.
@@ -629,6 +646,7 @@ def plot_bump(
         ylabel="rank",
         height=height or int(min(900, max(320, 150 + 24 * n))),
         legend=False,
+        width=width,
     )
     last = ranks.iloc[-1].to_numpy(dtype=float)
     seen: dict[float, int] = {}

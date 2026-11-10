@@ -68,7 +68,7 @@ pl.save_png(fig, "chart.png")                   # needs kaleido and Chrome (plot
 
 `write_image` needs kaleido **and** a Chrome install; on a headless box it usually fails. For PNGs without Chrome (or print figures at an exact size) use [`plotters.static`](#print-figures-plottersstatic).
 
-**Sizing.** Every plotter takes `height=` (grid charts compute it from their panel count; `height=` overrides that). `width=` exists on the line charts; for any other chart use `fig.update_layout(width=640)`. By default the figure fills its container.
+**Sizing.** Like `plotly.express`, every plotter takes `height=` and `width=` in pixels, so `pl.plot_series(df, width=640, height=360)` works on any chart. `width=None` (the default) fills the container, which is what you want in a notebook or an exported page. Grid-style charts (`plot_small_multiples`, `plot_acf_grid`, `plot_lag`, `plot_grid`, ...) compute their height from the number of panels, and `height=` overrides that. A test calls all 63 plotters with both arguments, so this stays true.
 
 **Hover documentation.** Every public function has a docstring listing its arguments, defaults and what it raises, and `Literal[...]` types show the allowed values. In VS Code, hover a function to read it.
 

@@ -63,6 +63,7 @@ def plot_scatter(
     xlabel: str | None = None,
     ylabel: str | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Two columns against each other, optionally split by group, annotated by label, or sized.
 
@@ -87,6 +88,7 @@ def plot_scatter(
         xlabel: X axis title; defaults to the column name.
         ylabel: Y axis title; defaults to the column name.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``frame`` is not a DataFrame (a Series or dict was passed).
@@ -135,7 +137,7 @@ def plot_scatter(
         apply_log(fig, "y", *_log_bounds(ys, "plot_scatter", "y"))
     note = f"marker area is proportional to {size}" if size else ""
     return finish(fig, title, subtitle or note, xlabel=xlabel or x, ylabel=ylabel or y, height=height,
-                  legend=group is not None)  # fmt: skip
+                  legend=group is not None, width=width)  # fmt: skip
 
 
 def plot_shaded_scatter(
@@ -155,6 +157,7 @@ def plot_shaded_scatter(
     xlabel: str | None = None,
     ylabel: str | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Two columns plus a **continuous** third as colour, with a colourbar.
 
@@ -180,6 +183,7 @@ def plot_shaded_scatter(
         xlabel: X axis title; defaults to the column name.
         ylabel: Y axis title; defaults to the column name.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: ``shade`` is not numeric, or ``log_shade`` / ``reference`` with non-positive
@@ -231,7 +235,14 @@ def plot_shaded_scatter(
     if logy:
         apply_log(fig, "y", *_log_bounds(ys, caller, "y"))
     return finish(
-        fig, title, subtitle, xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=False
+        fig,
+        title,
+        subtitle,
+        xlabel=xlabel or x,
+        ylabel=ylabel or y,
+        height=height,
+        legend=False,
+        width=width,
     )
 
 
@@ -249,6 +260,7 @@ def plot_density2d(
     xlabel: str | None = None,
     ylabel: str | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Two columns as a binned density: the scatter that stays readable with many points.
 
@@ -270,6 +282,7 @@ def plot_density2d(
         xlabel: X axis title; defaults to the column name.
         ylabel: Y axis title; defaults to the column name.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: no finite pairs, or a log axis with non-positive values.
@@ -319,7 +332,7 @@ def plot_density2d(
     if logy:
         apply_log(fig, "y", lo_y, hi_y)
     return finish(fig, title, subtitle or f"n = {xs.size:,} points in {bins} x {bins} cells",
-                  xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=False)  # fmt: skip
+                  xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=False, width=width)  # fmt: skip
 
 
 def _ols(x: np.ndarray, y: np.ndarray, degree: int, grid: np.ndarray, z: float = 1.96):
@@ -351,6 +364,7 @@ def plot_regression(
     xlabel: str | None = None,
     ylabel: str | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Scatter with an ordinary-least-squares fit and a 95% band for the mean (numpy only).
 
@@ -369,6 +383,7 @@ def plot_regression(
         xlabel: X axis title; defaults to the column name.
         ylabel: Y axis title; defaults to the column name.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: too few points for the degree, or more than 3 groups.
@@ -409,7 +424,7 @@ def plot_regression(
             else f"{name + ': ' if name else ''}R² {r2:.2f}"
         )
     return finish(fig, title, subtitle or "; ".join(notes), xlabel=xlabel or x, ylabel=ylabel or y, height=height,
-                  legend=bool(group))  # fmt: skip
+                  legend=bool(group), width=width)  # fmt: skip
 
 
 def plot_scatter_matrix(
@@ -421,6 +436,7 @@ def plot_scatter_matrix(
     bins: int = 30,
     cell: int = 150,
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Pairwise scatter of up to 6 numeric columns with histograms on the diagonal.
 
@@ -432,6 +448,7 @@ def plot_scatter_matrix(
         bins: Bins of the diagonal histograms.
         cell: Size of one cell in px.
         height: Total figure height in px; overrides the height computed from ``cell``.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: fewer than 2 or more than 6 columns.
@@ -462,4 +479,11 @@ def plot_scatter_matrix(
             if r == n:
                 fig.update_xaxes(title_text=cx, row=r, col=c)
     fig.update_layout(bargap=0)
-    return finish(fig, title, subtitle, height=height or max(HEIGHT, 110 + cell * n), legend=False)
+    return finish(
+        fig,
+        title,
+        subtitle,
+        height=height or max(HEIGHT, 110 + cell * n),
+        legend=False,
+        width=width,
+    )

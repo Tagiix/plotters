@@ -58,6 +58,7 @@ def plot_null_test(
     bins: int = 60,
     xlabel: str = "statistic",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """A simulated distribution with the tested value on it and the rejection region shaded.
 
@@ -76,6 +77,7 @@ def plot_null_test(
         bins: Histogram bins.
         xlabel: X axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: ``alpha`` outside (0, 1), unknown ``tail`` or no finite values.
@@ -109,11 +111,11 @@ def plot_null_test(
     edges = np.linspace(lo - pad, hi + pad, bins + 1)
     counts, _ = np.histogram(x, edges)
     centers = (edges[:-1] + edges[1:]) / 2
-    width = edges[1] - edges[0]
+    bin_width = edges[1] - edges[0]
     reject = (centers <= lo_cut) | (centers >= hi_cut)
     colors = [_color.with_alpha(st.negative if r else st.accent, 0.8 if r else 0.5) for r in reject]
     fig = go.Figure(
-        go.Bar(x=centers, y=counts / (n * width), width=width, marker={"color": colors, "line": {"width": 0}},
+        go.Bar(x=centers, y=counts / (n * bin_width), width=bin_width, marker={"color": colors, "line": {"width": 0}},
                showlegend=False, hovertemplate="%{x:.4g}<extra></extra>")
     )  # fmt: skip
     fig.add_shape(type="line", xref="x", x0=observed, x1=observed, yref="paper", y0=0, y1=1,
@@ -128,7 +130,14 @@ def plot_null_test(
         text=f"p = {p:.3g} ({tail}), α = {alpha:g}<br>{verdict}", font={"size": 11, "color": st.ink_2, "family": st.mono},
     )  # fmt: skip
     return finish(
-        fig, title, subtitle, xlabel=xlabel, ylabel="density", height=height, legend=False
+        fig,
+        title,
+        subtitle,
+        xlabel=xlabel,
+        ylabel="density",
+        height=height,
+        legend=False,
+        width=width,
     )
 
 
@@ -147,6 +156,7 @@ def plot_box(
     xlabel: str = "",
     ylabel: str = "",
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """One box per group, ranked by median: the ranking chart.
 
@@ -170,6 +180,7 @@ def plot_box(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height; defaults to a size that grows with the number of groups.
+        width: Figure width in px; ``None`` fills the container.
     """
     frames = pick(as_series_dict(data, _caller="plot_box"), series)
     groups = {str(k): v.dropna() for k, v in frames.items()}
@@ -221,7 +232,9 @@ def plot_box(
             raise ValueError("logvalue needs strictly positive data")
         apply_log(fig, value_axis, float(allv.min()) / 1.2, float(allv.max()) * 1.2)  # type: ignore[arg-type]
     h = height or (max(260, 70 + 44 * len(groups) + 110) if horizontal else HEIGHT)
-    return finish(fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=h, legend=False)
+    return finish(
+        fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=h, legend=False, width=width
+    )
 
 
 def plot_histogram(
@@ -235,6 +248,7 @@ def plot_histogram(
     normal: bool = False,
     xlabel: str = "",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Overlaid distributions on shared bins, with an optional normal fit per series.
 
@@ -248,6 +262,7 @@ def plot_histogram(
         normal: Overlay a normal fitted to each series (mean and standard deviation).
         xlabel: X axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: more than ``MAX_SERIES`` series or an empty series.
@@ -256,17 +271,17 @@ def plot_histogram(
     lo = min(v.min() for v in bags.values())
     hi = max(v.max() for v in bags.values())
     edges = np.linspace(lo, hi, bins + 1) if lo < hi else np.linspace(lo - 0.5, hi + 0.5, bins + 1)
-    width = edges[1] - edges[0]
+    bin_width = edges[1] - edges[0]
     centers = (edges[:-1] + edges[1:]) / 2
     fig = go.Figure()
     for i, (name, v) in enumerate(bags.items()):
         counts, _ = np.histogram(v, edges)
-        y = counts / (v.size * width) if density else counts
+        y = counts / (v.size * bin_width) if density else counts
         c = _style.color(i)
         fig.add_bar(
             x=centers,
             y=y,
-            width=width,
+            width=bin_width,
             name=name,
             marker={"color": _color.with_alpha(c, 0.5), "line": {"width": 0}},
         )
@@ -275,11 +290,11 @@ def plot_histogram(
             pdf = np.exp(-((grid - v.mean()) ** 2) / (2 * v.std() ** 2)) / (
                 v.std() * math.sqrt(2 * math.pi)
             )
-            fig.add_scatter(x=grid, y=pdf if density else pdf * v.size * width, mode="lines",
+            fig.add_scatter(x=grid, y=pdf if density else pdf * v.size * bin_width, mode="lines",
                             name=f"{name} normal fit", line={"color": c, "width": 1.6, "dash": "dash"})  # fmt: skip
     fig.update_layout(barmode="overlay")
     return finish(fig, title, subtitle, xlabel=xlabel, ylabel="density" if density else "count", height=height,
-                  legend=True if len(bags) > 1 or normal else False)  # fmt: skip
+                  legend=True if len(bags) > 1 or normal else False, width=width)  # fmt: skip
 
 
 def plot_ecdf(
@@ -293,6 +308,7 @@ def plot_ecdf(
     logy: bool = False,
     xlabel: str = "",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """The empirical distribution function: the distribution with no bin-width choice.
 
@@ -309,6 +325,7 @@ def plot_ecdf(
         logy: Logarithmic y axis.
         xlabel: X axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
     """
     bags = _bags(data, series, "plot_ecdf")
     fig = go.Figure()
@@ -336,7 +353,14 @@ def plot_ecdf(
         fig.update_yaxes(type="log")
     ylabel = "P(X ≥ x)" if complementary else "P(X ≤ x)"
     return finish(
-        fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=len(bags) > 1
+        fig,
+        title,
+        subtitle,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        height=height,
+        legend=len(bags) > 1,
+        width=width,
     )
 
 
@@ -350,6 +374,7 @@ def plot_qq(
     nu: float | None = None,
     standardize: bool | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Quantile-quantile plot against the normal, or Student-t fitted by maximum likelihood.
 
@@ -370,6 +395,7 @@ def plot_qq(
             ``True`` for ``dist="t"`` (the t quantiles are scaled to unit variance) and
             ``False`` for the normal.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ImportError: ``dist="t"`` and scipy is not installed.
@@ -426,7 +452,14 @@ def plot_qq(
     ylabel = "sample quantiles" + (" (standardised)" if standardize else "")
     xlabel = "normal quantiles" if dist == "normal" else "Student-t quantiles (unit variance)"
     return finish(
-        fig, title, sub, xlabel=xlabel, ylabel=ylabel, height=height, legend=len(bags) > 1
+        fig,
+        title,
+        sub,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        height=height,
+        legend=len(bags) > 1,
+        width=width,
     )
 
 
@@ -437,6 +470,7 @@ def plot_cumulative_share(
     *,
     series: Sequence[str] | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """How concentrated a total is, against a "paid evenly" diagonal.
 
@@ -449,6 +483,7 @@ def plot_cumulative_share(
         subtitle: Muted line under the title.
         series: Subset and order of series.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: negative values, or a total of zero.
@@ -475,7 +510,7 @@ def plot_cumulative_share(
     fig.update_xaxes(tickformat=".0%", range=[0, 1])
     fig.update_yaxes(tickformat=".0%", range=[0, 1.02])
     return finish(fig, title, subtitle, xlabel="share of observations (largest first)",
-                  ylabel="share of total", height=height, legend=True)  # fmt: skip
+                  ylabel="share of total", height=height, legend=True, width=width)  # fmt: skip
 
 
 def plot_expectile_curve(
@@ -486,6 +521,7 @@ def plot_expectile_curve(
     series: Sequence[str] | None = None,
     taus: Sequence[float] | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """The tau expectile over each series' OWN mean, against tau. The slope is the reading.
 
@@ -502,6 +538,7 @@ def plot_expectile_curve(
         series: Subset and order of series.
         taus: Levels in (0, 1); default 19 points from 0.05 to 0.95 (includes 0.5).
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: a series has a non-positive mean.
@@ -526,4 +563,5 @@ def plot_expectile_curve(
         ylabel="expectile / own mean",
         height=height,
         legend=len(bags) > 1,
+        width=width,
     )

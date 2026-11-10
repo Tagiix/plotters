@@ -653,6 +653,7 @@ def plot_line_band(
     xlabel: str = "",
     ylabel: str = "",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """A line with an uncertainty ribbon behind it.
 
@@ -668,6 +669,7 @@ def plot_line_band(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         KeyError: ``lower`` / ``upper`` lack a label present in ``data``.
@@ -693,7 +695,14 @@ def plot_line_band(
         fig.add_scatter(x=s.index, y=s.to_numpy(), mode="lines", name=str(name), legendgroup=str(name),
                         line={"color": color, "width": 2})  # fmt: skip
     return finish(
-        fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=len(centre) > 1
+        fig,
+        title,
+        subtitle,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        height=height,
+        legend=len(centre) > 1,
+        width=width,
     )
 
 
@@ -704,6 +713,7 @@ def plot_calendar_heatmap(
     *,
     fmt: str = ".4g",
     height: int = 260,
+    width: int | None = None,
 ) -> go.Figure:
     """A daily series as a weekday-by-week grid, shaded by value (like a contribution calendar).
 
@@ -713,6 +723,7 @@ def plot_calendar_heatmap(
         subtitle: Muted line under the title.
         fmt: Format spec for the hover value.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: the index is not a DatetimeIndex.
@@ -738,4 +749,4 @@ def plot_calendar_heatmap(
     ))  # fmt: skip
     fig.update_yaxes(autorange="reversed", showgrid=False, type="category")
     fig.update_xaxes(showgrid=False, tickformat="%b", dtick="M1")
-    return finish(fig, title, subtitle, height=height, legend=False)
+    return finish(fig, title, subtitle, height=height, legend=False, width=width)

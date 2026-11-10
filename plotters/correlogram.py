@@ -79,6 +79,7 @@ def plot_acf(
     alpha: float = 0.05,
     series: Sequence[str] | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """One correlogram: stems with a marker at the tip and, for one series, the Bartlett band.
 
@@ -102,11 +103,14 @@ def plot_acf(
         alpha: Two-sided level of the band.
         series: Subset and order of series.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: more than ``MAX_SERIES`` series, or ``lags`` too large for the sample.
     """
-    return _stem_figure(data, title, subtitle, lags, absolute, alpha, series, height, partial=False)
+    return _stem_figure(
+        data, title, subtitle, lags, absolute, alpha, series, height, partial=False, width=width
+    )
 
 
 def plot_pacf(
@@ -119,6 +123,7 @@ def plot_pacf(
     alpha: float = 0.05,
     series: Sequence[str] | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """The partial autocorrelation: what lag ``k`` adds once the lags in between are accounted for.
 
@@ -138,11 +143,14 @@ def plot_pacf(
         alpha: Two-sided level of the band.
         series: Subset and order of series.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: more than ``MAX_SERIES`` series, or ``lags`` too large for the sample.
     """
-    return _stem_figure(data, title, subtitle, lags, absolute, alpha, series, height, partial=True)
+    return _stem_figure(
+        data, title, subtitle, lags, absolute, alpha, series, height, partial=True, width=width
+    )
 
 
 def _stem_figure(
@@ -156,6 +164,7 @@ def _stem_figure(
     height: int,
     *,
     partial: bool,
+    width: int | None = None,
 ) -> go.Figure:
     caller = "plot_pacf" if partial else "plot_acf"
     frames = pick(as_series_dict(data, _caller=caller), series)
@@ -175,7 +184,7 @@ def _stem_figure(
     kind = "|x|" if absolute else "x"
     label = "pacf" if partial else "acf"
     return finish(fig, title, subtitle, xlabel="lag", ylabel=f"{label}({kind})", height=height,
-                  legend=True if single else None)  # fmt: skip
+                  legend=True if single else None, width=width)  # fmt: skip
 
 
 def plot_acf_grid(
@@ -191,6 +200,7 @@ def plot_acf_grid(
     series: Sequence[str] | None = None,
     panel_height: int = 260,
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """One correlogram panel per series, **each with its own band**. No series cap.
 
@@ -210,6 +220,7 @@ def plot_acf_grid(
         series: Subset and order of series.
         panel_height: Height of one panel row in px.
         height: Total figure height in px; overrides the height computed from ``panel_height``.
+        width: Figure width in px; ``None`` fills the container.
     """
     frames = pick(as_series_dict(data, _caller="plot_acf_grid"), series)
     names = [str(n) for n in frames]
@@ -227,5 +238,10 @@ def plot_acf_grid(
     kind = "|x|" if absolute else "x"
     fig.update_yaxes(title_text=f"{'pacf' if partial else 'acf'}({kind})", col=1)
     return finish(
-        fig, title, subtitle, height=height or max(HEIGHT, 120 + panel_height * rows), legend=False
+        fig,
+        title,
+        subtitle,
+        height=height or max(HEIGHT, 120 + panel_height * rows),
+        legend=False,
+        width=width,
     )

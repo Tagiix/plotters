@@ -54,6 +54,7 @@ def plot_forecast(
     xlabel: str = "",
     ylabel: str = "",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """History, forecast and prediction interval, with the forecast origin marked.
 
@@ -71,6 +72,7 @@ def plot_forecast(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``history`` is not a single Series.
@@ -123,7 +125,9 @@ def plot_forecast(
                   line={"color": st.muted, "width": 1, "dash": "dot"})  # fmt: skip
     fig.add_annotation(xref="x", x=origin, yref="paper", y=1, yanchor="top", xanchor="left", showarrow=False,
                        text=" forecast", font={"size": 10, "color": st.muted})  # fmt: skip
-    return finish(fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=True)
+    return finish(
+        fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=True, width=width
+    )
 
 
 def plot_residuals(
@@ -135,6 +139,7 @@ def plot_residuals(
     lags: int = 30,
     bins: int = 40,
     height: int = 640,
+    width: int | None = None,
 ) -> go.Figure:
     """The four panels to look at first when judging a model: time, distribution, QQ and acf.
 
@@ -153,6 +158,7 @@ def plot_residuals(
         lags: Lags of the acf panel and of the Ljung-Box test.
         bins: Histogram bins.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``residuals`` is not a single Series.
@@ -182,9 +188,9 @@ def plot_residuals(
     fig.add_hline(y=0, line={"color": st.axis, "width": 1}, row=1, col=1)  # type: ignore[arg-type]
     edges = np.linspace(x.min(), x.max(), bins + 1)
     counts, _ = np.histogram(x, edges)
-    width = edges[1] - edges[0]
+    bin_width = edges[1] - edges[0]
     centers = (edges[:-1] + edges[1:]) / 2
-    fig.add_bar(x=centers, y=counts / (len(x) * width), width=width, showlegend=False, hoverinfo="skip",
+    fig.add_bar(x=centers, y=counts / (len(x) * bin_width), width=bin_width, showlegend=False, hoverinfo="skip",
                 marker={"color": _color.with_alpha(st.accent, 0.6), "line": {"width": 0}}, row=1, col=2)  # fmt: skip
     grid = np.linspace(edges[0], edges[-1], 160)
     fig.add_scatter(x=grid, y=np.exp(-((grid - mean) ** 2) / (2 * sd**2)) / (sd * math.sqrt(2 * math.pi)), mode="lines",
@@ -216,7 +222,7 @@ def plot_residuals(
     fig.update_annotations(font={"size": 11, "color": st.ink_2})
     fig.update_xaxes(title_text="theoretical normal quantile", row=2, col=1)
     fig.update_xaxes(title_text="lag", row=2, col=2)
-    return finish(fig, title, subtitle or default, height=height, legend=False)
+    return finish(fig, title, subtitle or default, height=height, legend=False, width=width)
 
 
 def _wilson(hits: np.ndarray, n: np.ndarray, z: float = _Z95) -> tuple[np.ndarray, np.ndarray]:
@@ -238,6 +244,7 @@ def plot_calibration(
     strategy: str = "quantile",
     min_count: int = 5,
     height: int = 520,
+    width: int | None = None,
 ) -> go.Figure:
     """Reliability diagram: when a forecast says 70%, how often does it happen?
 
@@ -258,6 +265,7 @@ def plot_calibration(
             when forecasts cluster); ``"uniform"`` uses equal-width probability bins.
         min_count: Bins with fewer forecasts are not drawn (their interval says nothing).
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: probabilities outside [0, 1], outcomes that are not 0 / 1, a length mismatch,
@@ -313,7 +321,7 @@ def plot_calibration(
     fig.update_xaxes(constrain="domain")
     return finish(fig, title, subtitle or "above the diagonal: happens more often than forecast; flatter than the diagonal: overconfident",
                   xlabel="predicted probability", ylabel="observed frequency", height=height,
-                  legend=len(models) > 1)  # fmt: skip
+                  legend=len(models) > 1, width=width)  # fmt: skip
 
 
 def plot_quantile_calibration(
@@ -324,6 +332,7 @@ def plot_quantile_calibration(
     *,
     alpha: float = 0.05,
     height: int = 520,
+    width: int | None = None,
 ) -> go.Figure:
     """How often the realised value falls below each forecast quantile, against its nominal level.
 
@@ -341,6 +350,7 @@ def plot_quantile_calibration(
         subtitle: Muted line under the title.
         alpha: Two-sided level of the ribbon.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``actual`` is not a Series.
@@ -388,7 +398,7 @@ def plot_quantile_calibration(
     fig.update_xaxes(constrain="domain")
     return finish(fig, title, subtitle or f"points outside the ribbon: miscalibrated at the {1 - alpha:.0%} level",
                   xlabel="nominal quantile level", ylabel="observed fraction below", height=height,
-                  legend=len(models) > 1)  # fmt: skip
+                  legend=len(models) > 1, width=width)  # fmt: skip
 
 
 def plot_pit(
@@ -399,6 +409,7 @@ def plot_pit(
     bins: int = 10,
     alpha: float = 0.05,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Probability integral transform histogram: is the forecast distribution right?
 
@@ -414,6 +425,7 @@ def plot_pit(
         bins: Number of bins.
         alpha: Two-sided level of the ribbon.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: values outside [0, 1], or more than ``MAX_SERIES`` models.
@@ -446,4 +458,4 @@ def plot_pit(
     fig.update_xaxes(range=[0, 1])
     fig.update_yaxes(rangemode="tozero")
     return finish(fig, title, subtitle or "uniform is calibrated; U = overconfident, hump = too wide, slope = biased",
-                  xlabel="PIT value", ylabel="density", height=height, legend=len(models) > 1)  # fmt: skip
+                  xlabel="PIT value", ylabel="density", height=height, legend=len(models) > 1, width=width)  # fmt: skip

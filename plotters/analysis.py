@@ -79,6 +79,7 @@ def plot_series_distribution(
     normal_reference: bool = False,
     hist_range: tuple[float, float] | None = None,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Histogram with a dropdown over series, statistical annotations and quantile markers.
 
@@ -101,6 +102,7 @@ def plot_series_distribution(
         normal_reference: Overlay the standard normal N(0, 1), *not* a fitted normal.
         hist_range: ``(low, high)`` drawing window; default is each series' own extent.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
     """
     frames = pick(as_series_dict(data, _caller="plot_series_distribution"), series)
     values = {str(n): _finite(s).to_numpy() for n, s in frames.items()}
@@ -120,11 +122,13 @@ def plot_series_distribution(
             lo, hi = lo - 0.5, hi + 0.5
         edges = np.linspace(lo, hi, bins + 1)
         counts, _ = np.histogram(v, edges)
-        width = edges[1] - edges[0]
-        density = counts / (v.size * width)  # denominator is the full sample, not just the window
+        bin_width = edges[1] - edges[0]
+        density = counts / (
+            v.size * bin_width
+        )  # denominator is the full sample, not just the window
         fig = go.Figure(
             go.Bar(
-                x=(edges[:-1] + edges[1:]) / 2, y=density, width=width, name=name, showlegend=False,
+                x=(edges[:-1] + edges[1:]) / 2, y=density, width=bin_width, name=name, showlegend=False,
                 marker={"color": _color.with_alpha(st.accent, 0.72), "line": {"width": 0}},
                 hovertemplate="%{x:.4g}: %{y:.4g}<extra></extra>",
             )
@@ -151,7 +155,7 @@ def plot_series_distribution(
         fig.update_xaxes(range=[lo, hi])
         fig.update_yaxes(title_text="density")
         views[name] = fig
-    return plot_views(views, title, subtitle, height=height, legend=normal_reference)
+    return plot_views(views, title, subtitle, height=height, legend=normal_reference, width=width)
 
 
 def _prepare(

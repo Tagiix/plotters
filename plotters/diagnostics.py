@@ -36,6 +36,7 @@ def plot_gaps(
     bins: int = 120,
     sort: bool = False,
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Where each series has missing data: one row per series, time along the x axis.
 
@@ -53,6 +54,7 @@ def plot_gaps(
         bins: Number of stretches along the time axis (fewer if there are fewer rows).
         sort: Order rows by the share missing, worst first, instead of the input order.
         height: Figure height; grows with the number of series.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: no data.
@@ -89,6 +91,7 @@ def plot_gaps(
         subtitle or "colour = the share of each stretch that is missing",
         height=height or int(min(900, max(240, 140 + 26 * len(names)))),
         legend=False,
+        width=width,
     )
     fig.update_layout(
         margin={"l": int(min(320, max(60, widest * 6.6 + 40)))}
@@ -118,6 +121,7 @@ def plot_seasonal(
     show_average: bool = True,
     ylabel: str = "",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """One line per cycle laid over the same axis, so a repeating pattern shows up as parallel lines.
 
@@ -137,6 +141,7 @@ def plot_seasonal(
         show_average: Draw the average across cycles.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: the index is not a DatetimeIndex, or an unknown ``period`` / ``agg``.
@@ -184,7 +189,7 @@ def plot_seasonal(
                         line={"color": st.ink, "width": 2.6, "dash": "dash"})  # fmt: skip
     fig.update_xaxes(tickmode="array", tickvals=list(range(len(ticks))), ticktext=ticks)
     return finish(fig, title, subtitle or f"one line per {cycle_name}, older = fainter", ylabel=ylabel,
-                  height=height, legend=len(table.columns) <= 14)  # fmt: skip
+                  height=height, legend=len(table.columns) <= 14, width=width)  # fmt: skip
 
 
 def _ramp(ramp: tuple[str, ...], t: float) -> str:
@@ -202,6 +207,7 @@ def plot_lag(
     ncols: int = 3,
     panel_height: int = 300,
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Each observation against the one ``k`` steps earlier: does today look like yesterday?
 
@@ -217,6 +223,7 @@ def plot_lag(
         ncols: Panels per row.
         panel_height: Height of one panel row in px.
         height: Total figure height in px; overrides the height computed from ``panel_height``.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``series`` is not a Series.
@@ -248,7 +255,12 @@ def plot_lag(
     fig.update_yaxes(title_text="x[t]", col=1)
     fig.update_annotations(font={"size": 11, "color": st.ink_2})
     return finish(
-        fig, title, subtitle, height=height or max(HEIGHT, 120 + panel_height * rows), legend=False
+        fig,
+        title,
+        subtitle,
+        height=height or max(HEIGHT, 120 + panel_height * rows),
+        legend=False,
+        width=width,
     )
 
 
@@ -261,6 +273,7 @@ def plot_ccf(
     lags: int = 20,
     alpha: float = 0.05,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Cross-correlation of two series at lags in both directions: does one lead the other?
 
@@ -277,6 +290,7 @@ def plot_ccf(
         lags: Highest lag in each direction.
         alpha: Two-sided level of the band.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``x`` or ``y`` is not a Series.
@@ -302,6 +316,7 @@ def plot_ccf(
         ylabel=f"corr({xn}[t], {yn}[t-k])",
         height=height,
         legend=True,
+        width=width,
     )
 
 
@@ -316,6 +331,7 @@ def plot_periodogram(
     peaks: int = 3,
     logy: bool = True,
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Where the variance of a series sits across frequencies: a cycle shows as a spike.
 
@@ -334,6 +350,7 @@ def plot_periodogram(
         peaks: How many of the largest spikes to label.
         logy: Logarithmic power axis (power spans decades).
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: fewer than 8 observations or an unknown ``x``.
@@ -370,4 +387,5 @@ def plot_periodogram(
         ylabel="power",
         height=height,
         legend=False,
+        width=width,
     )

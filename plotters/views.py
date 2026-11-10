@@ -73,6 +73,7 @@ def plot_views(
     subtitle: str = "",
     *,
     height: int = HEIGHT,
+    width: int | None = None,
     dropdown_x: float = 0.0,
     dropdown_y: float = 1.0,
     legend: bool | None = None,
@@ -91,6 +92,7 @@ def plot_views(
         title: Figure title.
         subtitle: Muted line under the title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
         dropdown_x: Dropdown x position in paper units.
         dropdown_y: Dropdown y position in paper units (above the plot at 1.0).
         legend: ``None`` shows it when the first view has more than one named trace.
@@ -166,7 +168,9 @@ def plot_views(
                 }
             ]
         )
-    return finish(merged, title, subtitle, height=height, legend=legend, menu=len(names) > 1)
+    return finish(
+        merged, title, subtitle, height=height, legend=legend, menu=len(names) > 1, width=width
+    )
 
 
 def annotate_views(fig: go.Figure, texts: Mapping[str, str]) -> go.Figure:
@@ -257,6 +261,7 @@ def plot_grid(
     ncols: int = 2,
     panel_height: int = 320,
     height: int | None = None,
+    width: int | None = None,
     shared_x: bool = False,
     shared_y: bool = False,
     legend: bool | None = None,
@@ -278,6 +283,7 @@ def plot_grid(
         ncols: Panels per row.
         panel_height: Height of one panel row in px.
         height: Total figure height in px; overrides the height computed from ``panel_height``.
+        width: Figure width in px; ``None`` fills the container.
         shared_x: Share the x axis across panels.
         shared_y: Share the y axis across panels.
         legend: ``None`` shows the legend when any named trace asks for one.
@@ -350,5 +356,10 @@ def plot_grid(
         )
     )
     return finish(
-        grid, title, subtitle, height=height or max(HEIGHT, 140 + panel_height * rows), legend=show
+        grid,
+        title,
+        subtitle,
+        height=height or max(HEIGHT, 140 + panel_height * rows),
+        legend=show,
+        width=width,
     )

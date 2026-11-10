@@ -89,6 +89,7 @@ def _grid(
     colorbar: bool,
     xlabel: str,
     ylabel: str,
+    width: int | None = None,
 ) -> go.Figure:
     st = _style.get_style()
     xs = [str(c) for c in frame.columns]
@@ -123,7 +124,9 @@ def _grid(
     fig.update_yaxes(autorange="reversed", showgrid=False, type="category")
     fig.update_xaxes(showgrid=False, type="category", side="bottom")
     h = height or int(min(900, max(HEIGHT, 170 + 34 * len(ys))))
-    return finish(fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=h, legend=False)
+    return finish(
+        fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=h, legend=False, width=width
+    )
 
 
 def plot_matrix(
@@ -139,6 +142,7 @@ def plot_matrix(
     xlabel: str = "",
     ylabel: str = "",
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Any wide or square frame on its own values, every cell written in.
 
@@ -158,6 +162,7 @@ def plot_matrix(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height; defaults to a size that grows with the number of rows.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``frame`` is not a DataFrame.
@@ -191,7 +196,7 @@ def plot_matrix(
     ]
     texts = [[_format(float(v), fmt) if np.isfinite(v) else "" for v in row] for row in values]
     return _grid(frame, values, colors, texts, zmin, zmax, scale, title, subtitle, annotate,
-                 "%{y} × %{x}: %{z:.4g}<extra></extra>", height, True, xlabel, ylabel)  # fmt: skip
+                 "%{y} × %{x}: %{z:.4g}<extra></extra>", height, True, xlabel, ylabel, width=width)  # fmt: skip
 
 
 def plot_correlation(
@@ -204,6 +209,7 @@ def plot_correlation(
     fmt: str = ".2f",
     annotate: bool = True,
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """Correlation between the columns of a data frame, diverging about 0, diagonal masked.
 
@@ -221,6 +227,7 @@ def plot_correlation(
         fmt: Format spec for the cell text.
         annotate: Write the coefficient in each cell.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``data`` is not a DataFrame, or already looks like a correlation matrix.
@@ -241,7 +248,7 @@ def plot_correlation(
                                "matrix: pass the data it came from, or use plot_matrix for the matrix.")  # fmt: skip
     corr = numeric.corr(method=method)
     figure = plot_matrix(corr, title, subtitle, diverging=True, center=0.0, mask_diagonal=True, fmt=fmt,
-                         annotate=annotate, height=height)  # fmt: skip
+                         annotate=annotate, height=height, width=width)  # fmt: skip
     if fixed_range:
         figure.update_traces(zmin=-1, zmax=1)
     return figure
@@ -255,6 +262,7 @@ def plot_table_heatmap(
     normalize: Literal["column", "row"] = "column",
     fmt: str = ".4g",
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """A table whose columns are on **different scales**, such as a moments table.
 
@@ -270,6 +278,7 @@ def plot_table_heatmap(
         normalize: ``"column"`` shades each column on its own range, ``"row"`` each row.
         fmt: Format spec for the cell text.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``frame`` is not a DataFrame.
@@ -291,7 +300,7 @@ def plot_table_heatmap(
     ]
     texts = [[_format(float(v), fmt) if np.isfinite(v) else "" for v in row] for row in values]
     figure = _grid(frame, unit, colors, texts, 0.0, 1.0, _style.sequential_scale(), title, subtitle, True,
-                   "%{y} × %{x}<extra></extra>", height, False, "", "")  # fmt: skip
+                   "%{y} × %{x}<extra></extra>", height, False, "", "", width=width)  # fmt: skip
     figure.update_traces(
         customdata=values, hovertemplate="%{y} × %{x}: %{customdata:.4g}<extra></extra>"
     )
@@ -311,6 +320,7 @@ def plot_contours(
     xlabel: str = "",
     ylabel: str = "",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """A function of two variables as labelled level curves.
 
@@ -332,6 +342,7 @@ def plot_contours(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``frame`` is not a DataFrame.
@@ -374,7 +385,9 @@ def plot_contours(
                     f"log{axis} needs strictly positive {'columns' if axis == 'x' else 'index'}"
                 )
             apply_log(fig, axis, float(arr.min()), float(arr.max()))  # type: ignore[arg-type]
-    return finish(fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=False)
+    return finish(
+        fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=False, width=width
+    )
 
 
 def plot_table(
@@ -386,6 +399,7 @@ def plot_table(
     column_formats: Mapping[str, str] | None = None,
     index: bool = True,
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """A DataFrame as a clean table in the library's style, with no shading.
 
@@ -401,6 +415,7 @@ def plot_table(
             share, ``",.0f"`` for a count).
         index: Show the index as the first column.
         height: Figure height; grows with the number of rows.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``frame`` is not a DataFrame.
@@ -437,4 +452,5 @@ def plot_table(
         subtitle,
         height=height or int(min(900, max(200, 150 + 27 * (len(shown) + 1)))),
         legend=False,
+        width=width,
     )

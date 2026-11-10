@@ -14,4 +14,5 @@ First release.
 - Small tasks: shaded `spans=` and `step=` on `plot_series`; `size=` (bubble) on `plot_scatter` and `plot_shaded_scatter`; `error=` on `plot_bars` and `plot_grouped_bars`; `plot_pareto`; `plot_grid` to combine finished figures.
 - Diagnostics: `plot_gaps`, `plot_seasonal`, `plot_lag`, `plot_ccf`, `plot_periodogram`; `plot_bump`, `plot_table`, `plot_series(range_buttons=)`, `group_summary`.
 - Reorganised for readability: new `relationships` module (scatter family), `comparisons` reduced to model comparison, shared checks in `_checks`; README restructured around a task-to-function table; gallery sections mirror the README.
+- Every plotly plotter takes `width=` and `height=` (as in `plotly.express`); a test calls all 63 with both.
 - Visual gallery (`python -m tests.visual`) and a unit test suite.

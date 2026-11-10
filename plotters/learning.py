@@ -72,6 +72,7 @@ def plot_decision_boundary(
     xlabel: str = "",
     ylabel: str = "",
     height: int = 520,
+    width: int | None = None,
 ) -> go.Figure:
     """A classifier's decision boundary over its input plane, with the training points.
 
@@ -95,6 +96,7 @@ def plot_decision_boundary(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``grid`` is not a DataFrame.
@@ -145,6 +147,7 @@ def plot_decision_boundary(
         ylabel=ylabel or (y or ""),
         height=height,
         legend=True,
+        width=width,
     )
 
 
@@ -159,6 +162,7 @@ def plot_coefficient_path(
     xlabel: str = "shrinkage",
     ylabel: str = "coefficient",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """How each coefficient moves as the penalty changes: ridge and lasso profiles.
 
@@ -176,6 +180,7 @@ def plot_coefficient_path(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``paths`` is not a DataFrame.
@@ -192,9 +197,9 @@ def plot_coefficient_path(
     st = _style.get_style()
     fig = go.Figure()
     for i, col in enumerate(paths.columns):
-        dash, width = _style.line_style(i)
+        dash, line_width = _style.line_style(i)
         fig.add_scatter(x=xs, y=paths[col].to_numpy(dtype=float), mode="lines", name=str(col),
-                        line={"color": _style.color(i), "dash": dash, "width": width}, showlegend=not label_ends)  # fmt: skip
+                        line={"color": _style.color(i), "dash": dash, "width": line_width}, showlegend=not label_ends)  # fmt: skip
     fig.add_hline(y=0, line={"color": st.axis, "width": 1})
     if selected is not None:
         fig.add_shape(type="line", xref="x", x0=selected, x1=selected, yref="paper", y0=0, y1=1,
@@ -204,7 +209,14 @@ def plot_coefficient_path(
             raise ValueError("logx needs strictly positive index values")
         apply_log(fig, "x", float(xs.min()), float(xs.max()))
     fig = finish(
-        fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=not label_ends
+        fig,
+        title,
+        subtitle,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        height=height,
+        legend=not label_ends,
+        width=width,
     )
     if label_ends and len(paths.columns):
         ends = paths.iloc[int(np.argmax(xs))].to_numpy(dtype=float)
@@ -236,6 +248,7 @@ def plot_error_curves(
     xlabel: str = "model complexity",
     ylabel: str = "error",
     height: int = HEIGHT,
+    width: int | None = None,
 ) -> go.Figure:
     """Training, test and cross-validation error against model complexity, with the chosen model.
 
@@ -256,6 +269,7 @@ def plot_error_curves(
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ConventionError: ``curves`` is not a DataFrame.
@@ -315,7 +329,14 @@ def plot_error_curves(
             raise ValueError("logx needs strictly positive index values")
         apply_log(fig, "x", float(xs.min()), float(xs.max()))
     return finish(
-        fig, title, subtitle or note, xlabel=xlabel, ylabel=ylabel, height=height, legend=True
+        fig,
+        title,
+        subtitle or note,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        height=height,
+        legend=True,
+        width=width,
     )
 
 
@@ -327,6 +348,7 @@ def plot_roc(
     *,
     curve: Literal["roc", "pr"] = "roc",
     height: int = 520,
+    width: int | None = None,
 ) -> go.Figure:
     """ROC (or precision-recall) curves for one or several scoring models.
 
@@ -341,6 +363,7 @@ def plot_roc(
         subtitle: Muted line under the title.
         curve: ``"roc"`` or ``"pr"``.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: labels that are not 0 / 1 or have one class, a length mismatch, an unknown
@@ -381,7 +404,16 @@ def plot_roc(
         fig.update_xaxes(range=[0, 1])
         fig.update_yaxes(range=[0, 1.02])
         axes = ("recall", "precision")
-    return finish(fig, title, subtitle, xlabel=axes[0], ylabel=axes[1], height=height, legend=True)
+    return finish(
+        fig,
+        title,
+        subtitle,
+        xlabel=axes[0],
+        ylabel=axes[1],
+        height=height,
+        legend=True,
+        width=width,
+    )
 
 
 def partial_dependence(
@@ -434,6 +466,7 @@ def plot_partial_dependence(
     shared_y: bool = True,
     panel_height: int = 230,
     height: int | None = None,
+    width: int | None = None,
 ) -> go.Figure:
     """One panel per feature showing how the prediction responds to it.
 
@@ -447,6 +480,7 @@ def plot_partial_dependence(
         shared_y: Share the y range so the importance of features can be compared by eye.
         panel_height: Height of one panel row in px.
         height: Total figure height in px; overrides the height computed from ``panel_height``.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: no curves.
@@ -471,7 +505,12 @@ def plot_partial_dependence(
     fig.update_annotations(font={"size": 11, "color": st.ink_2})
     fig.update_yaxes(title_text="partial dependence", col=1)
     return finish(
-        fig, title, subtitle, height=height or max(HEIGHT, 120 + panel_height * rows), legend=False
+        fig,
+        title,
+        subtitle,
+        height=height or max(HEIGHT, 120 + panel_height * rows),
+        legend=False,
+        width=width,
     )
 
 
@@ -485,6 +524,7 @@ def plot_scree(
     threshold: float | None = None,
     top: int | None = None,
     height: int = 420,
+    width: int | None = None,
 ) -> go.Figure:
     """Variance explained by each principal component, with the running total.
 
@@ -497,6 +537,7 @@ def plot_scree(
         threshold: A cumulative share to mark (for instance 0.9 for "enough components for 90%").
         top: Show only the first ``top`` components.
         height: Figure height in px.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: negative values, or ``cumulative`` / ``threshold`` without ``normalize``.
@@ -521,7 +562,7 @@ def plot_scree(
     if normalize:
         fig.update_yaxes(tickformat=".0%", range=[0, 1.02 if cumulative else None])
     return finish(fig, title, subtitle, ylabel="share of variance" if normalize else "variance", height=height,
-                  legend=cumulative)  # fmt: skip
+                  legend=cumulative, width=width)  # fmt: skip
 
 
 def plot_confusion(
@@ -533,6 +574,7 @@ def plot_confusion(
     labels: Sequence[object] | None = None,
     normalize: Literal["true", "pred", "all"] | None = "true",
     height: int | None = None,
+    width: int | None = None,
 ):
     """Confusion matrix: rows are the actual class, columns the predicted one.
 
@@ -548,6 +590,7 @@ def plot_confusion(
         normalize: ``"true"`` (rows sum to 1), ``"pred"`` (columns sum to 1), ``"all"`` or ``None``
             for raw counts.
         height: Figure height; grows with the number of classes.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ValueError: different lengths or an unknown ``normalize``.
@@ -569,7 +612,7 @@ def plot_confusion(
     elif normalize == "all":
         shown = counts / counts.to_numpy().sum()
     fig = plot_matrix(shown.fillna(0.0), title, subtitle or "rows: actual class, columns: predicted class",
-                      diverging=False, fmt=".0%" if normalize else ",.0f", xlabel="predicted", ylabel="actual", height=height)  # fmt: skip
+                      diverging=False, fmt=".0%" if normalize else ",.0f", xlabel="predicted", ylabel="actual", height=height, width=width)  # fmt: skip
     fig.data[0].update(
         customdata=counts.to_numpy(),
         hovertemplate="actual %{y}, predicted %{x}<br>count %{customdata}<extra></extra>",
@@ -587,6 +630,7 @@ def plot_dendrogram(
     n_clusters: int | None = None,
     horizontal: bool = True,
     height: int | None = None,
+    width: int | None = None,
 ):
     """Hierarchical clustering of the rows of a data frame as a tree (needs scipy).
 
@@ -603,6 +647,7 @@ def plot_dendrogram(
         horizontal: Leaves down the left side (readable for many or long labels); ``False`` puts
             them along the bottom.
         height: Figure height; grows with the number of leaves when horizontal.
+        width: Figure width in px; ``None`` fills the container.
 
     Raises:
         ImportError: scipy is not installed.
@@ -649,4 +694,4 @@ def plot_dendrogram(
         fig.update_xaxes(tickmode="array", tickvals=ticks, ticktext=names, showgrid=False)
     (fig.update_xaxes if horizontal else fig.update_yaxes)(title_text=f"{method} linkage distance")
     h = height or (int(min(1100, max(300, 130 + 18 * n))) if horizontal else HEIGHT)
-    return finish(fig, title, subtitle, height=h, legend=False)
+    return finish(fig, title, subtitle, height=h, legend=False, width=width)
