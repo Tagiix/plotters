@@ -191,14 +191,14 @@ def ts_views():
 
 @card(
     "Time series",
-    "plot_series: max_visible",
+    "plot_series: max_drawn",
     [
-        "max_visible=8: eight lines start drawn; the other 12 are greyed out in the legend, one click to add.",
+        "max_drawn=8: eight lines start drawn; the other 12 are greyed out in the legend, one click to add.",
     ],
 )
 def ts_maxvisible():
     return pl.plot_series(
-        ds.levels(20), "max_visible=8", "Click a greyed legend entry to add it", max_visible=8
+        ds.levels(20), "max_drawn=8", "Click a greyed legend entry to add it", max_drawn=8
     )
 
 

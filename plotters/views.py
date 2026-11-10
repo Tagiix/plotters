@@ -67,6 +67,25 @@ def _axis_state(fig: go.Figure, axis: str) -> dict[str, Any]:
     return out
 
 
+def _share_colors(traces: list[Any]) -> None:
+    """Give traces with the same name the colour of the first one, so a series keeps its colour across views."""
+    first: dict[str, dict[str, Any]] = {}
+    for trace in traces:
+        if not trace.name:
+            continue
+        own = {
+            "line.color": trace.line.color if "line" in trace else None,
+            "marker.color": trace.marker.color if "marker" in trace else None,
+            "fillcolor": trace.fillcolor if "fillcolor" in trace else None,
+        }
+        seen = first.setdefault(trace.name, own)
+        if seen is own:
+            continue
+        for key, value in own.items():
+            if isinstance(value, str) and isinstance(seen[key], str):
+                trace.update({key: seen[key]})
+
+
 def plot_views(
     figures: Mapping[str, go.Figure],
     title: str = "",
@@ -81,7 +100,8 @@ def plot_views(
     """Merge prepared figures into one that switches between them with a dropdown.
 
     Traces, axes (title, range, scale, ticks), annotations, shapes and the legend all switch
-    together. The first view opens initially. Source figures are copied, including traces
+    together. A trace keeps its colour across views when it has the same name. The first view
+    opens initially. Source figures are copied, including traces
     that were hidden in them (they stay hidden or ``legendonly`` in their own view).
 
     Cartesian figures only: existing menus, sliders, animation frames and non-Cartesian
@@ -118,6 +138,8 @@ def plot_views(
         for trace in _traces(figures[name]):
             merged.add_trace(go.Figure(trace).data[0])
             owners.append(name)
+
+    _share_colors(_traces(merged))
 
     def visibility(view: str) -> list[Any]:
         out: list[Any] = []

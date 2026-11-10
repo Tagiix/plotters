@@ -44,9 +44,9 @@ def test_no_series_limit_but_only_twenty_start_visible():
     assert states.count(True) == 20 and states.count("legendonly") == 30
 
 
-def test_max_visible_is_respected():
+def test_max_drawn_is_respected():
     many = pd.DataFrame({f"s{i}": np.arange(5.0) for i in range(12)})
-    fig = pl.plot_series(many, "t", max_visible=8)
+    fig = pl.plot_series(many, "t", max_drawn=8)
     assert [t.visible for t in fig.data].count(True) == 8
 
 
