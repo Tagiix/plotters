@@ -200,7 +200,7 @@ One section per module. Everything is imported from `plotters` directly (`pl.plo
 
 | Function | For |
 |---|---|
-| `plot_series` | One line per series: the workhorse. `percent`, `logy`, `logx`, `slider`, `range_buttons`, `fill`, `step`, `bands` (horizontal reference lines), `markers` (vertical lines), `spans` (shaded bands such as a recession or outage), `views` (dropdown over named subsets), `max_drawn` |
+| `plot_series` | One line per series: the workhorse. `percent`, `logy`, `logx`, `slider`, `range_buttons`, `fill`, `step`, `bands` (horizontal reference lines), `markers` (vertical lines), `spans` (shaded bands such as a recession or outage), `views` (dropdown over named subsets), `drawn` |
 | `plot_bars_with_line` | Realised as bars, prediction as lines on one axis. Did it track or lag? |
 | `plot_cumulative` | Wealth curve from per-period values; `compound=True` for reinvested |
 | `plot_drawdown` | Drop from the running peak, filled because the area *is* the quantity |
@@ -209,7 +209,7 @@ One section per module. Everything is imported from `plotters` directly (`pl.plo
 | `plot_line_band` | A line with an uncertainty ribbon |
 | `plot_calendar_heatmap` | A daily series as a weekday-by-week grid |
 
-`plot_series` has **no series limit**: every series is kept but only the first `max_drawn` (default 20) start drawn, the rest sit greyed out in the legend, one click to add. With `views={"A": [...], "B": [...]}` a dropdown swaps named subsets of the lines already passed (each series is drawn once and the menu toggles `visible`, so an exported HTML keeps working with no server). A series named in no view stays visible in all of them, so a pooled baseline sits behind each per-ticker view without repeating it. Past 8 such series the views become an explicit allowlist.
+`plot_series` has **no series limit**: every series is kept but only the first `drawn` (default 20) start drawn, the rest sit greyed out in the legend, one click to add. With `views={"A": [...], "B": [...]}` a dropdown swaps named subsets of the lines already passed (each series is drawn once and the menu toggles `visible`, so an exported HTML keeps working with no server). A series named in no view stays visible in all of them, so a pooled baseline sits behind each per-ticker view without repeating it. Past 8 such series the views become an explicit allowlist.
 
 ### Statistics and analysis: `analysis`
 

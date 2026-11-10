@@ -56,7 +56,7 @@ def _line(i: int, *, vary_dash: bool = False, width: float | None = None) -> dic
 def _resolve_visibility(
     names: Sequence[str],
     views: Mapping[str, Sequence[str]] | None,
-    max_drawn: int,
+    drawn: int,
 ) -> dict[str, list[Visibility]]:
     """Decide ``visible`` for every series in every view.
 
@@ -64,15 +64,15 @@ def _resolve_visibility(
     A series is ``True`` (drawn), ``"legendonly"`` (greyed out, one click to add) or
     ``False`` (not in this view, no legend entry).
 
-    * Without views, the first ``max_drawn`` series (input order) are drawn.
+    * Without views, the first ``drawn`` series (input order) are drawn.
     * With views, a series named in no view is a *common baseline*: drawn in all views and
-      counted first towards ``max_drawn``, so a pooled line sits behind each per-ticker
+      counted first towards ``drawn``, so a pooled line sits behind each per-ticker
       view without being repeated in every list. Past ``MAX_SERIES`` such series the rule
       is dropped and the views are an explicit allowlist, otherwise a caller showing its
       best 8 of 42 would leave 34 "unnamed" series drawn everywhere.
     """
     if not views:
-        return {"": [True if i < max_drawn else "legendonly" for i in range(len(names))]}
+        return {"": [True if i < drawn else "legendonly" for i in range(len(names))]}
 
     unknown = sorted({n for members in views.values() for n in members if n not in names})
     if unknown:
@@ -86,7 +86,7 @@ def _resolve_visibility(
     out: dict[str, list[Visibility]] = {}
     for view, members in views.items():
         ordered = baselines + [m for m in members if m not in baselines]
-        shown = {n: (True if i < max_drawn else "legendonly") for i, n in enumerate(ordered)}
+        shown = {n: (True if i < drawn else "legendonly") for i, n in enumerate(ordered)}
         out[view] = [shown.get(n, False) for n in names]
     return out
 
@@ -182,7 +182,7 @@ def plot_series(
     spans: Mapping[str, tuple[Any, Any]] | None = None,
     step: bool = False,
     views: Mapping[str, Sequence[str]] | None = None,
-    max_drawn: int = MAX_VISIBLE,
+    drawn: int = MAX_VISIBLE,
     xlabel: str = "",
     ylabel: str = "",
     height: int = HEIGHT,
@@ -192,7 +192,7 @@ def plot_series(
     """One line per series: the workhorse time-series chart.
 
     There is no limit on the number of series. Every series is kept, but only the first
-    ``max_drawn`` start drawn; the rest are greyed out in the legend, one click to add.
+    ``drawn`` start drawn; the rest are greyed out in the legend, one click to add.
 
     Args:
         data: Series, wide DataFrame (one series per column) or ``{label: Series}``.
@@ -216,7 +216,7 @@ def plot_series(
             between named subsets of the series already passed. Every series is drawn once
             and the menu toggles ``visible``, so an exported HTML keeps working with no
             server. A series named in no view stays visible in all of them.
-        max_drawn: How many series start drawn (default 20).
+        drawn: How many series start drawn (default 20).
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
@@ -235,7 +235,7 @@ def plot_series(
     """
     frames = pick(as_series_dict(data, _caller="plot_series"), series)
     names = list(frames)
-    visibility = _resolve_visibility([str(n) for n in names], views, max_drawn)
+    visibility = _resolve_visibility([str(n) for n in names], views, drawn)
     first = next(iter(visibility.values()))
     st = _style.get_style()
 

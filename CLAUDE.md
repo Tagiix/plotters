@@ -36,7 +36,7 @@ Data flow in every plotter: **input normaliser (`frames.py`) → draw traces →
 | `layout.py` | `finish()`, `apply_log()`, `log_ticks()`; **all pixel maths lives here** |
 | `frames.py` | Input normalisers (`as_series_dict`, `as_value_series`, `pick`), reshaping helpers, `group_summary` |
 | `stats.py` | Pure numbers behind the charts (no plotting): acf/pacf/ccf, ljung_box, periodogram, expectile, ROC, one-SE rule... |
-| `timeseries.py` | `plot_series` (views, spans, step, range_buttons, max_drawn), cumulative, drawdown, stacked, rolling, bars_with_line, line_band, calendar_heatmap |
+| `timeseries.py` | `plot_series` (views, spans, step, range_buttons, drawn), cumulative, drawdown, stacked, rolling, bars_with_line, line_band, calendar_heatmap |
 | `analysis.py` | `analyze_series`, `compare_series`, `plot_series_distribution` |
 | `diagnostics.py` | gaps, seasonal, lag, ccf, periodogram |
 | `correlogram.py` | acf, pacf, acf grid (`partial=True`) |

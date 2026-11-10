@@ -15,5 +15,5 @@ First release.
 - Diagnostics: `plot_gaps`, `plot_seasonal`, `plot_lag`, `plot_ccf`, `plot_periodogram`; `plot_bump`, `plot_table`, `plot_series(range_buttons=)`, `group_summary`.
 - Reorganised for readability: new `relationships` module (scatter family), `comparisons` reduced to model comparison, shared checks in `_checks`; README restructured around a task-to-function table; gallery sections mirror the README.
 - Every plotly plotter takes `width=` and `height=` (as in `plotly.express`); a test calls all 63 with both.
-- `plot_views` keeps a series' colour across views (same trace name, same colour); `plot_series(max_drawn=)` (was `max_visible`).
+- `plot_views` keeps a series' colour across views (same trace name, same colour); `plot_series(drawn=)` (was `max_visible`).
 - Visual gallery (`python -m tests.visual`) and a unit test suite.
