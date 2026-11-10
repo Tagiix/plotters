@@ -89,8 +89,8 @@ def finish(
         fig: Figure to style; modified in place and returned.
         title: Figure title.
         subtitle: Smaller muted line under the title.
-        xlabel: X axis title.
-        ylabel: Y axis title.
+        xlabel: X axis title; empty leaves any existing title untouched.
+        ylabel: Y axis title; empty leaves any existing title untouched.
         height: Figure height in px.
         width: Figure width in px; ``None`` lets plotly fill the container.
         slider: Reserve room for a range slider under the axis.
@@ -109,11 +109,10 @@ def finish(
         >>> fig = pl.finish(fig, "Title", "subtitle", ylabel="y")
     """
     st = _style.get_style()
-    heading = (
-        title
-        if not subtitle
-        else f'{title}<br><sub><span style="color:{st.muted}">{subtitle}</span></sub>'
-    )
+    muted_sub = f'<sub><span style="color:{st.muted}">{subtitle}</span></sub>'
+    heading = muted_sub if subtitle and not title else title
+    if subtitle and title:
+        heading = f"{title}<br>{muted_sub}"
 
     labels = _legend_labels(fig)
     show = (len(labels) > 1) if legend is None else legend
@@ -160,8 +159,10 @@ def finish(
     )
     if width is not None:
         fig.update_layout(width=width)
-    fig.update_xaxes(title_text=xlabel)
-    fig.update_yaxes(title_text=ylabel)
+    if xlabel:
+        fig.update_xaxes(title_text=xlabel)
+    if ylabel:
+        fig.update_yaxes(title_text=ylabel)
     _maybe_display(fig)
     return fig
 
