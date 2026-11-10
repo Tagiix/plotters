@@ -46,11 +46,24 @@ Once the repository is public, `git+https://github.com/Tagiix/plotters.git` work
 
 Core needs `pandas`, `numpy`, `plotly` and nothing else. `scipy` is only for `plot_qq(dist="t")`, `plot_dendrogram` and the p value of `ljung_box` (imported lazily; extra `stats`), and `matplotlib` only for `plotters.static` (extra `static`). The package ships type information (`py.typed`), so hover docs and completion work in your other projects too.
 
-**Editing the library while using it** (editable install; changes show up immediately in any project that uses this environment):
+**One clone, many projects (recommended for your own machine).** Keep a single checkout and install it *editable* into each project's venv. Every project then imports straight from that folder, and one `git pull` updates all of them at once:
 
 ```bash
-git clone git@github.com:Tagiix/plotters.git && cd plotters
-uv venv && uv pip install -e ".[dev]"      # or: python -m venv .venv && .venv/bin/pip install -e ".[dev]"
+git clone git@github.com:Tagiix/plotters.git ~/code/plotters      # once per machine
+
+# install into any venvs (extras via PLOTTERS_EXTRAS: stats = scipy, static = matplotlib)
+PLOTTERS_EXTRAS=stats,static ~/code/plotters/scripts/install-into.sh ~/code/project-a/.venv
+PLOTTERS_EXTRAS=static       ~/code/plotters/scripts/install-into.sh ~/code/project-b/.venv
+
+git -C ~/code/plotters pull                                       # update every project
+```
+
+The script (`scripts/install-into.sh`) takes any number of venv folders, uses `uv` if present and `pip` otherwise, and prints where each environment imports `plotters` from. It never edits the projects themselves, so their `requirements.txt` stays machine-independent.
+
+**Developing the library** (the same editable install, plus the test tools):
+
+```bash
+cd ~/code/plotters && uv venv && uv pip install -e ".[dev]"      # or: python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 ```
 
 The build backend (hatchling) writes a plain static path for editable installs, so Pylance and pyright resolve the import with no extra flag.
@@ -433,5 +446,6 @@ plotters/
   static.py          matplotlib print figures (opt-in)
   _color.py  _checks.py  _errors.py  _types.py   private helpers
 tests/unit/          correctness tests;   tests/visual/   the gallery and its cards
-examples/            small type-checked usage scripts
+examples/            small type-checked usage scripts (run by the tests)
+scripts/             install-into.sh: editable install into other venvs
 ```
