@@ -7,6 +7,7 @@ at the tip, the significance band as a ribbon behind.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from statistics import NormalDist
 
 import numpy as np
 import plotly.graph_objects as go
@@ -16,15 +17,25 @@ from . import style as _style
 from ._types import MAX_SERIES, SeriesLike
 from .frames import as_series_dict, pick
 from .layout import HEIGHT, finish
-from .stats import _finite, acf_values, bartlett_band
+from .stats import _finite, acf_values, bartlett_band, pacf_values
 
-__all__ = ["plot_acf", "plot_acf_grid"]
+__all__ = ["plot_acf", "plot_pacf", "plot_acf_grid"]
 
 
-def _coefficients(values, lags: int, absolute: bool) -> tuple[np.ndarray, int]:
+def _coefficients(
+    values, lags: int, absolute: bool, partial: bool = False
+) -> tuple[np.ndarray, int]:
     x = np.abs(np.asarray(values, dtype=float)) if absolute else np.asarray(values, dtype=float)
     x = x[np.isfinite(x)]
-    return acf_values(x, lags), x.size
+    return (pacf_values(x, lags) if partial else acf_values(x, lags)), x.size
+
+
+def _band(coef: np.ndarray, n: int, alpha: float, partial: bool) -> np.ndarray:
+    """Acf: Bartlett's widening band. Pacf: the flat ``z / sqrt(n)`` band (valid under an AR null)."""
+    if not partial:
+        return bartlett_band(coef, n, alpha)
+    z = NormalDist().inv_cdf(1 - alpha / 2)
+    return np.full(len(coef), z / np.sqrt(n))
 
 
 def _stems(lag: np.ndarray, coef: np.ndarray) -> tuple[list[float | None], list[float | None]]:
@@ -95,22 +106,75 @@ def plot_acf(
     Raises:
         ValueError: more than ``MAX_SERIES`` series, or ``lags`` too large for the sample.
     """
-    frames = pick(as_series_dict(data, _caller="plot_acf"), series)
+    return _stem_figure(data, title, subtitle, lags, absolute, alpha, series, height, partial=False)
+
+
+def plot_pacf(
+    data: SeriesLike,
+    title: str = "",
+    subtitle: str = "",
+    *,
+    lags: int = 40,
+    absolute: bool = False,
+    alpha: float = 0.05,
+    series: Sequence[str] | None = None,
+    height: int = HEIGHT,
+) -> go.Figure:
+    """The partial autocorrelation: what lag ``k`` adds once the lags in between are accounted for.
+
+    The companion to :func:`plot_acf`, with the same stems and ribbon. For an AR(p) series the pacf
+    cuts off after lag p, where the plain acf only decays, so the two together suggest the order.
+    The band here is the flat ``z / sqrt(n)`` that holds under an autoregressive null (unlike the
+    acf's Bartlett band, it does not widen). It is pointwise: about 1 lag in 20 escapes by chance.
+    With several series the stems sit side by side and no band is drawn; use
+    ``plot_acf_grid(partial=True)`` for a band per series.
+
+    Args:
+        data: Series, wide DataFrame or ``{label: Series}``.
+        title: Figure title.
+        subtitle: Muted line under the title.
+        lags: Highest lag.
+        absolute: Use ``|x|``.
+        alpha: Two-sided level of the band.
+        series: Subset and order of series.
+        height: Figure height in px.
+
+    Raises:
+        ValueError: more than ``MAX_SERIES`` series, or ``lags`` too large for the sample.
+    """
+    return _stem_figure(data, title, subtitle, lags, absolute, alpha, series, height, partial=True)
+
+
+def _stem_figure(
+    data: SeriesLike,
+    title: str,
+    subtitle: str,
+    lags: int,
+    absolute: bool,
+    alpha: float,
+    series: Sequence[str] | None,
+    height: int,
+    *,
+    partial: bool,
+) -> go.Figure:
+    caller = "plot_pacf" if partial else "plot_acf"
+    frames = pick(as_series_dict(data, _caller=caller), series)
     if len(frames) > MAX_SERIES:
         raise ValueError(
-            f"plot_acf draws at most {MAX_SERIES} series; use plot_acf_grid, which has no cap"
+            f"{caller} draws at most {MAX_SERIES} series; use plot_acf_grid, which has no cap"
         )
     fig = go.Figure()
     lag = np.arange(1, lags + 1, dtype=float)
     single = len(frames) == 1
     for i, (name, s) in enumerate(frames.items()):
-        coef, n = _coefficients(_finite(s).to_numpy(), lags, absolute)
+        coef, n = _coefficients(_finite(s).to_numpy(), lags, absolute, partial)
         offset = 0.0 if single else (i - (len(frames) - 1) / 2) * 0.7 / len(frames)
-        band = bartlett_band(coef, n, alpha) if single else None
+        band = _band(coef, n, alpha, partial) if single else None
         _add_panel(fig, lag, coef, band, _style.color(i), "" if single else str(name), offset)
     fig.add_hline(y=0, line={"color": _style.get_style().axis, "width": 1})
     kind = "|x|" if absolute else "x"
-    return finish(fig, title, subtitle, xlabel="lag", ylabel=f"acf({kind})", height=height,
+    label = "pacf" if partial else "acf"
+    return finish(fig, title, subtitle, xlabel="lag", ylabel=f"{label}({kind})", height=height,
                   legend=True if single else None)  # fmt: skip
 
 
@@ -122,6 +186,7 @@ def plot_acf_grid(
     lags: int = 40,
     ncols: int = 2,
     absolute: bool = False,
+    partial: bool = False,
     alpha: float = 0.05,
     series: Sequence[str] | None = None,
     panel_height: int = 260,
@@ -139,6 +204,7 @@ def plot_acf_grid(
         lags: Highest lag.
         ncols: Panels per row.
         absolute: Use ``|x|`` in every panel.
+        partial: Draw partial autocorrelations (flat band) instead of autocorrelations.
         alpha: Two-sided level of the bands.
         series: Subset and order of series.
         panel_height: Height of one panel row in px.
@@ -151,11 +217,11 @@ def plot_acf_grid(
     st = _style.get_style()
     lag = np.arange(1, lags + 1, dtype=float)
     for k, s in enumerate(frames.values()):
-        coef, n = _coefficients(_finite(s).to_numpy(), lags, absolute)
-        _add_panel(fig, lag, coef, bartlett_band(coef, n, alpha), st.accent, "", row=k // ncols + 1,
+        coef, n = _coefficients(_finite(s).to_numpy(), lags, absolute, partial)
+        _add_panel(fig, lag, coef, _band(coef, n, alpha, partial), st.accent, "", row=k // ncols + 1,
                    col=k % ncols + 1, legend=False)  # fmt: skip
     fig.update_annotations(font={"size": 11, "color": st.ink_2})
     fig.update_xaxes(title_text="lag", row=rows)
     kind = "|x|" if absolute else "x"
-    fig.update_yaxes(title_text=f"acf({kind})", col=1)
+    fig.update_yaxes(title_text=f"{'pacf' if partial else 'acf'}({kind})", col=1)
     return finish(fig, title, subtitle, height=max(HEIGHT, 120 + panel_height * rows), legend=False)

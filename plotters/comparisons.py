@@ -30,6 +30,7 @@ __all__ = [
     "plot_scatter",
     "plot_shaded_scatter",
     "plot_interval",
+    "plot_density2d",
 ]
 
 _MARKER_SIZE = 9
@@ -742,3 +743,90 @@ def plot_interval(
     )
     return finish(fig, title, _sub(subtitle, note), xlabel=xlabel or point,
                   height=height or int(min(900, max(260, 150 + 30 * len(frame)))), legend=bool(group))  # fmt: skip
+
+
+def plot_density2d(
+    frame: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str = "",
+    subtitle: str = "",
+    *,
+    bins: int = 60,
+    log_counts: bool = True,
+    logx: bool = False,
+    logy: bool = False,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    height: int = HEIGHT,
+) -> go.Figure:
+    """Two columns as a binned density: the scatter that stays readable with many points.
+
+    Past a few thousand points a scatter overplots into a solid blob and hides where the mass is.
+    Here the plane is cut into cells and each is shaded by how many points it holds; empty cells
+    stay blank.
+
+    Args:
+        frame: Long DataFrame.
+        x: Column for the x axis.
+        y: Column for the y axis.
+        title: Figure title.
+        subtitle: Muted line under the title; a default reports the number of points.
+        bins: Cells per axis.
+        log_counts: Shade by ``log10(count)`` so sparse tails stay visible next to a dense core;
+            the colourbar is still labelled in counts.
+        logx: Logarithmic x axis; cells are equal-width in log space (needs positive values).
+        logy: Logarithmic y axis.
+        xlabel: X axis title; defaults to the column name.
+        ylabel: Y axis title; defaults to the column name.
+        height: Figure height in px.
+
+    Raises:
+        ValueError: no finite pairs, or a log axis with non-positive values.
+    """
+    caller = "plot_density2d"
+    _require_columns(frame, caller, x=x, y=y)
+    xs, ys = _numeric(frame, x, caller), _numeric(frame, y, caller)
+    ok = np.isfinite(xs) & np.isfinite(ys)
+    xs, ys = xs[ok], ys[ok]
+    if xs.size == 0:
+        raise ValueError(f"{caller}: no finite (x, y) pairs")
+    if logx:
+        lo, hi = _log_bounds(xs, caller, "x")
+    if logy:
+        lo_y, hi_y = _log_bounds(ys, caller, "y")
+    xe = (
+        np.geomspace(xs.min(), xs.max(), bins + 1)
+        if logx
+        else np.linspace(xs.min(), xs.max(), bins + 1)
+    )
+    ye = (
+        np.geomspace(ys.min(), ys.max(), bins + 1)
+        if logy
+        else np.linspace(ys.min(), ys.max(), bins + 1)
+    )
+    counts, _, _ = np.histogram2d(xs, ys, bins=[xe, ye])
+    z = counts.T.copy()
+    z[z == 0] = np.nan
+    xc = np.sqrt(xe[:-1] * xe[1:]) if logx else (xe[:-1] + xe[1:]) / 2
+    yc = np.sqrt(ye[:-1] * ye[1:]) if logy else (ye[:-1] + ye[1:]) / 2
+    st = _style.get_style()
+    shown = np.log10(z) if log_counts else z
+    top = float(np.nanmax(shown))
+    ticks = np.linspace(float(np.nanmin(shown)), top, 5)
+    colorbar = {"title": {"text": "count", "font": {"size": 11, "color": st.ink_2}}, "thickness": 12,
+                "outlinewidth": 0, "tickfont": {"size": 10, "color": st.muted}}  # fmt: skip
+    if log_counts:
+        colorbar.update(
+            tickmode="array", tickvals=ticks.tolist(), ticktext=[f"{10**t:.0f}" for t in ticks]
+        )
+    fig = go.Figure(go.Heatmap(
+        x=xc, y=yc, z=shown, colorscale=_style.sequential_scale(), colorbar=colorbar, customdata=z,
+        hovertemplate=f"{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<br>count=%{{customdata:.0f}}<extra></extra>",
+    ))  # fmt: skip
+    if logx:
+        apply_log(fig, "x", lo, hi)
+    if logy:
+        apply_log(fig, "y", lo_y, hi_y)
+    return finish(fig, title, subtitle or f"n = {xs.size:,} points in {bins} x {bins} cells",
+                  xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=False)  # fmt: skip

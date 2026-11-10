@@ -23,6 +23,7 @@ from .categorical import (
 )
 from .comparisons import (
     plot_box_series,
+    plot_density2d,
     plot_interval,
     plot_paired_difference,
     plot_rank_heatmap,
@@ -31,7 +32,7 @@ from .comparisons import (
     plot_small_multiples,
     plot_tradeoff,
 )
-from .correlogram import plot_acf, plot_acf_grid
+from .correlogram import plot_acf, plot_acf_grid, plot_pacf
 from .distributions import (
     plot_box,
     plot_cumulative_share,
@@ -40,6 +41,13 @@ from .distributions import (
     plot_histogram,
     plot_null_test,
     plot_qq,
+)
+from .forecasting import (
+    plot_calibration,
+    plot_forecast,
+    plot_pit,
+    plot_quantile_calibration,
+    plot_residuals,
 )
 from .frames import (
     as_series_dict,
@@ -54,13 +62,31 @@ from .frames import (
 )
 from .io import save_html, save_png
 from .layout import apply_log, finish, log_ticks
+from .learning import (
+    partial_dependence,
+    plot_coefficient_path,
+    plot_confusion,
+    plot_decision_boundary,
+    plot_dendrogram,
+    plot_error_curves,
+    plot_partial_dependence,
+    plot_roc,
+    plot_scree,
+)
 from .matrices import plot_contours, plot_correlation, plot_matrix, plot_table_heatmap
 from .notebook import autoshow, show, show_all
 from .stats import (
     acf_values,
+    average_precision,
     bartlett_band,
+    ljung_box,
     normalise_series,
     normalize_series,
+    one_standard_error_choice,
+    pacf_values,
+    precision_recall_curve,
+    roc_auc,
+    roc_curve,
     sample_expectile,
     series_statistics,
     series_turnover_ratio,
@@ -93,6 +119,29 @@ except PackageNotFoundError:  # running from a source tree that is not installed
     __version__ = "0.0.0"
 
 __all__ = [
+    "partial_dependence",
+    "plot_coefficient_path",
+    "plot_confusion",
+    "plot_decision_boundary",
+    "plot_dendrogram",
+    "plot_error_curves",
+    "plot_partial_dependence",
+    "plot_roc",
+    "plot_scree",
+    "average_precision",
+    "one_standard_error_choice",
+    "precision_recall_curve",
+    "roc_auc",
+    "roc_curve",
+    "plot_density2d",
+    "plot_calibration",
+    "plot_forecast",
+    "plot_pit",
+    "plot_quantile_calibration",
+    "plot_residuals",
+    "plot_pacf",
+    "ljung_box",
+    "pacf_values",
     "plot_bars",
     "plot_calendar_heatmap",
     "plot_counts",

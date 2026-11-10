@@ -26,6 +26,13 @@ __all__ = [
     "sample_expectile",
     "acf_values",
     "bartlett_band",
+    "pacf_values",
+    "ljung_box",
+    "one_standard_error_choice",
+    "roc_curve",
+    "roc_auc",
+    "precision_recall_curve",
+    "average_precision",
 ]
 
 
@@ -277,3 +284,170 @@ def bartlett_band(
     z = NormalDist().inv_cdf(1 - alpha / 2)
     cumulative = np.concatenate([[0.0], np.cumsum(r[:-1] ** 2)])
     return z * np.sqrt((1 + 2 * cumulative) / n)
+
+
+def pacf_values(series: pd.Series | np.ndarray | Sequence[float], lags: int) -> np.ndarray:
+    """Partial autocorrelation at lags 1 to ``lags``, by the Durbin-Levinson recursion.
+
+    The partial autocorrelation at lag ``k`` is the correlation between ``x[t]`` and ``x[t-k]``
+    after removing what the lags in between explain. For an AR(p) series it cuts off after lag p,
+    where the plain acf only decays.
+
+    Args:
+        series: Observations in order; missing and infinite values are dropped first.
+        lags: Highest lag.
+
+    Returns:
+        Array of length ``lags``; entry ``k - 1`` is the partial autocorrelation at lag ``k``.
+
+    Raises:
+        ValueError: ``lags`` is below 1 or not smaller than the number of observations.
+    """
+    r = np.concatenate([[1.0], acf_values(series, lags)])
+    phi = np.zeros((lags + 1, lags + 1))
+    out = np.zeros(lags)
+    phi[1, 1] = out[0] = r[1]
+    for k in range(2, lags + 1):
+        num = r[k] - phi[k - 1, 1:k] @ r[k - 1 : 0 : -1]
+        den = 1.0 - phi[k - 1, 1:k] @ r[1:k]
+        phi[k, k] = out[k - 1] = num / den
+        phi[k, 1:k] = phi[k - 1, 1:k] - phi[k, k] * phi[k - 1, k - 1 : 0 : -1]
+    return out
+
+
+def ljung_box(
+    series: pd.Series | np.ndarray | Sequence[float], lags: int, *, model_df: int = 0
+) -> tuple[float, float]:
+    """Ljung-Box portmanteau test that the first ``lags`` autocorrelations are jointly zero.
+
+    ``Q = n (n + 2) * sum_k r_k**2 / (n - k)``, compared with a chi-square on ``lags - model_df``
+    degrees of freedom. The p value needs scipy (imported lazily); without it ``nan`` is returned
+    for p and Q is still valid.
+
+    Args:
+        series: Residuals or any series; missing and infinite values are dropped first.
+        lags: Number of autocorrelations tested.
+        model_df: Parameters fitted by the model that produced the residuals, subtracted from the
+            degrees of freedom.
+
+    Returns:
+        ``(Q, p)``.
+    """
+    x = np.asarray(series, dtype=float)
+    n = int(np.isfinite(x).sum())
+    r = acf_values(x, lags)
+    q = float(n * (n + 2) * np.sum(r**2 / (n - np.arange(1, lags + 1))))
+    try:
+        from scipy import stats as _sps  # type: ignore[import-not-found]
+    except ImportError:
+        return q, float("nan")
+    dof = max(lags - model_df, 1)
+    return q, float(_sps.chi2.sf(q, dof))
+
+
+def one_standard_error_choice(
+    mean: pd.Series, se: pd.Series, *, simpler: Literal["low", "high"] = "low"
+) -> object:
+    """The one-standard-error rule: the simplest model within one standard error of the best.
+
+    Cross-validated error is noisy, so the minimum is partly luck. The rule takes the simplest
+    candidate whose error is no more than one standard error above the minimum's.
+
+    Args:
+        mean: Error per candidate, indexed by complexity (smaller is better).
+        se: Standard error of that error, same index.
+        simpler: Which end of the index is the simpler model: ``"low"`` (fewer terms, smaller k...)
+            or ``"high"`` (a larger penalty, a bigger k in k-NN).
+
+    Returns:
+        The index label of the chosen candidate.
+
+    Raises:
+        ValueError: the indexes differ or are empty.
+    """
+    if not mean.index.equals(se.index) or mean.empty:
+        raise ValueError("mean and se need the same, non-empty index")
+    best: Any = mean.idxmin()
+    limit = float(mean[best] + se[best])
+    eligible = mean[mean <= limit].index
+    ordered = sorted(eligible)
+    return ordered[0] if simpler == "low" else ordered[-1]
+
+
+def _binary(
+    y_true: Sequence[float] | np.ndarray | pd.Series,
+    score: Sequence[float] | np.ndarray | pd.Series,
+):
+    y = np.asarray(y_true, dtype=float)
+    s = np.asarray(score, dtype=float)
+    if y.shape != s.shape:
+        raise ValueError(f"y_true has {y.size} values but score has {s.size}")
+    if not np.isin(y, (0.0, 1.0)).all():
+        raise ValueError("y_true must be 0 or 1")
+    if y.sum() in (0, y.size):
+        raise ValueError("y_true needs both classes")
+    ok = np.isfinite(s)
+    return y[ok], s[ok]
+
+
+def _cumulative_counts(y: np.ndarray, s: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    order = np.argsort(-s, kind="stable")
+    ys, ss = y[order], s[order]
+    tps = np.cumsum(ys)
+    fps = np.cumsum(1 - ys)
+    last = np.r_[np.where(np.diff(ss))[0], len(ss) - 1]  # one point per distinct threshold
+    return tps[last], fps[last], ss[last]
+
+
+def roc_curve(
+    y_true: Sequence[float] | np.ndarray | pd.Series,
+    score: Sequence[float] | np.ndarray | pd.Series,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """False-positive and true-positive rates for every distinct score threshold.
+
+    Args:
+        y_true: 0 / 1 labels (1 = positive).
+        score: Higher means more likely positive.
+
+    Returns:
+        ``(fpr, tpr, thresholds)``, starting at ``(0, 0)`` (threshold ``inf``).
+    """
+    y, s = _binary(y_true, score)
+    tps, fps, thr = _cumulative_counts(y, s)
+    return (
+        np.r_[0.0, fps / (1 - y).sum()],
+        np.r_[0.0, tps / y.sum()],
+        np.r_[np.inf, thr],
+    )
+
+
+def roc_auc(
+    y_true: Sequence[float] | np.ndarray | pd.Series,
+    score: Sequence[float] | np.ndarray | pd.Series,
+) -> float:
+    """Area under the ROC curve: the chance a random positive outscores a random negative."""
+    fpr, tpr, _ = roc_curve(y_true, score)
+    return float(np.sum(np.diff(fpr) * (tpr[1:] + tpr[:-1]) / 2))
+
+
+def precision_recall_curve(
+    y_true: Sequence[float] | np.ndarray | pd.Series,
+    score: Sequence[float] | np.ndarray | pd.Series,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Precision and recall for every distinct score threshold.
+
+    Returns:
+        ``(precision, recall, thresholds)``, in decreasing-threshold order.
+    """
+    y, s = _binary(y_true, score)
+    tps, fps, thr = _cumulative_counts(y, s)
+    return tps / (tps + fps), tps / y.sum(), thr
+
+
+def average_precision(
+    y_true: Sequence[float] | np.ndarray | pd.Series,
+    score: Sequence[float] | np.ndarray | pd.Series,
+) -> float:
+    """Area under the precision-recall curve as a step sum: ``sum (R_k - R_{k-1}) * P_k``."""
+    precision, recall, _ = precision_recall_curve(y_true, score)
+    return float(np.sum(np.diff(np.r_[0.0, recall]) * precision))

@@ -120,6 +120,33 @@ Histogram limits (`hist_range`) never erase tail probability: values outside the
 
 `plot_acf` draws a stem from zero to each coefficient, a marker at the tip, and the significance band as a ribbon. **The band widens with the lag**, and that is the point: Bartlett's formula inherits the autocorrelation already present at shorter lags and equals the textbook `1.96/√n` only at lag 1. `absolute=True` plots `acf(|x|)`: on a return series `acf(x)` asks whether the sign is predictable, `acf(|x|)` whether the magnitude is (volatility clustering, the ARCH case). `plot_acf_grid` gives each series its own panel and band, with no series cap.
 
+`plot_pacf` is the companion: the partial autocorrelation cuts off after lag p for an AR(p) series where the acf only decays, and its band is the flat `z/√n`. `plot_acf_grid(partial=True)` draws one pacf panel per series. `pacf_values` and `ljung_box` (Q and p) give the numbers.
+
+### Forecast evaluation: `forecasting`
+
+| Function | For |
+|---|---|
+| `plot_forecast` | History, forecast(s) and prediction interval with the forecast origin marked; `actual=` draws what really happened |
+| `plot_residuals` | Four panels: over time (or against `fitted=`), distribution vs a normal, normal QQ, acf with band; subtitle gives moments and Ljung-Box |
+| `plot_calibration` | Reliability diagram with Wilson intervals: when a forecast says 70%, how often does it happen? A curve **flatter** than the diagonal means overconfident |
+| `plot_quantile_calibration` | Observed fraction below each forecast quantile vs its nominal level, with the ribbon sampling noise allows |
+| `plot_pit` | Probability-integral-transform histogram: U = overconfident, hump = too wide, slope = biased |
+
+### Statistical learning: `learning`
+
+Plots for the model-fitting workflow (the kind drawn throughout *The Elements of Statistical Learning*). They draw what you have computed; none fits a model.
+
+| Function | For |
+|---|---|
+| `plot_decision_boundary` | A classifier's boundary from a grid of scores, tinted sides, training points, and a dashed reference boundary (e.g. Bayes) |
+| `plot_coefficient_path` | Ridge / lasso profiles against λ or degrees of freedom, names at the line ends |
+| `plot_error_curves` | Train / test / CV error against complexity with standard-error ribbons, a reference level, and the minimum or the **one-standard-error** choice marked (`one_standard_error_choice` gives the number) |
+| `plot_roc` | ROC or precision-recall curves with AUC / AP in the legend (`roc_curve`, `roc_auc`, `precision_recall_curve`, `average_precision` give the numbers) |
+| `partial_dependence`, `plot_partial_dependence` | Compute and draw how a model's prediction responds to each feature, with a rug of data deciles |
+| `plot_scree` | Variance explained by each principal component with the running total |
+| `plot_confusion` | Confusion matrix, rows as shares of the actual class (hover shows counts) |
+| `plot_dendrogram` | Hierarchical clustering tree with the cut for `n_clusters` (needs scipy) |
+
 ### Matrices: `matrices`
 
 Colour by **value** (a rank would discard magnitude).
@@ -145,6 +172,7 @@ Cell text is coloured from the **measured luminance** of each fill, never from a
 | `plot_scatter` | Two columns, optional `y = x` diagonal |
 | `plot_shaded_scatter` | Two columns plus a continuous third as colour, with a colourbar |
 | `plot_interval` | One horizontal interval per row; intervals crossing `reference` are hollow (not separable) |
+| `plot_density2d` | A binned density for scatters with many points: the plane cut into cells shaded by count (log-scaled by default), empty cells blank |
 
 `plot_box_series` needs a **numeric x**, and that is not a style choice: a plotly `Box` width is in data units, so the same width renders many times wider at one end of a log axis than the other. The axis is linear, ticked at the values that exist, and the width comes from the tightest gap divided by the group count.
 
