@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plotters"
+version = "0.1.0"
+description = "Opinionated, generic plotly charts: pandas in, a themed Figure out."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["pandas>=2.0", "numpy>=1.24", "plotly>=5.18"]
+
+[project.optional-dependencies]
+stats = ["scipy>=1.10"]
+static = ["matplotlib>=3.7"]
+dev = ["pytest>=8", "pyright", "ruff", "scipy>=1.10", "matplotlib>=3.7", "pandas-stubs"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["plotters"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.pyright]
+include = ["plotters", "examples"]
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
