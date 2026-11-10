@@ -425,7 +425,15 @@ def roc_auc(
     y_true: Sequence[float] | np.ndarray | pd.Series,
     score: Sequence[float] | np.ndarray | pd.Series,
 ) -> float:
-    """Area under the ROC curve: the chance a random positive outscores a random negative."""
+    """Area under the ROC curve: the chance a random positive outscores a random negative.
+
+    Args:
+        y_true: 0 / 1 labels (1 = positive).
+        score: Higher means more likely positive. Ties count as half a win.
+
+    Raises:
+        ValueError: labels that are not 0 / 1 or have only one class, or a length mismatch.
+    """
     fpr, tpr, _ = roc_curve(y_true, score)
     return float(np.sum(np.diff(fpr) * (tpr[1:] + tpr[:-1]) / 2))
 
@@ -435,6 +443,10 @@ def precision_recall_curve(
     score: Sequence[float] | np.ndarray | pd.Series,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Precision and recall for every distinct score threshold.
+
+    Args:
+        y_true: 0 / 1 labels (1 = positive).
+        score: Higher means more likely positive.
 
     Returns:
         ``(precision, recall, thresholds)``, in decreasing-threshold order.
@@ -448,6 +460,14 @@ def average_precision(
     y_true: Sequence[float] | np.ndarray | pd.Series,
     score: Sequence[float] | np.ndarray | pd.Series,
 ) -> float:
-    """Area under the precision-recall curve as a step sum: ``sum (R_k - R_{k-1}) * P_k``."""
+    """Area under the precision-recall curve as a step sum: ``sum (R_k - R_{k-1}) * P_k``.
+
+    Args:
+        y_true: 0 / 1 labels (1 = positive).
+        score: Higher means more likely positive.
+
+    Raises:
+        ValueError: labels that are not 0 / 1 or have only one class, or a length mismatch.
+    """
     precision, recall, _ = precision_recall_curve(y_true, score)
     return float(np.sum(np.diff(np.r_[0.0, recall]) * precision))
