@@ -9,7 +9,27 @@ description = "Opinionated, generic plotly charts: pandas in, a themed Figure ou
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "tagiix", email = "clement.chivet@gmail.com" }]
+keywords = ["plotly", "pandas", "visualization", "charts", "forecasting", "statistics"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Typing :: Typed",
+]
 dependencies = ["pandas>=2.0", "numpy>=1.24", "plotly>=5.18"]
+
+[project.urls]
+Homepage = "https://github.com/Tagiix/plotters"
+Repository = "https://github.com/Tagiix/plotters"
+Issues = "https://github.com/Tagiix/plotters/issues"
+Changelog = "https://github.com/Tagiix/plotters/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 stats = ["scipy>=1.10"]
@@ -18,6 +38,9 @@ dev = ["pytest>=8", "pyright", "ruff", "scipy>=1.10", "matplotlib>=3.7", "pandas
 
 [tool.hatch.build.targets.wheel]
 packages = ["plotters"]
+
+[tool.hatch.build.targets.sdist]
+include = ["plotters", "tests", "examples", "README.md", "LICENSE", "CHANGELOG.md", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

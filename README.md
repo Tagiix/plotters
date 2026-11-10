@@ -27,19 +27,30 @@ pl.plot_tradeoff(table, x="cost", y="error", label="model", logx=True)
 
 ## Install
 
+From GitHub into the active Python environment (the SSH form also works while the repository is private):
+
 ```bash
-pip install "plotters @ git+https://github.com/<you>/plotters.git"                # core
-pip install "plotters[stats,static] @ git+https://github.com/<you>/plotters.git"  # + scipy, matplotlib
-uv add "plotters @ git+https://github.com/<you>/plotters.git@v0.1.0"              # pin a tag
+pip install "plotters @ git+ssh://git@github.com/Tagiix/plotters.git"                 # core
+pip install "plotters[stats,static] @ git+ssh://git@github.com/Tagiix/plotters.git"    # + scipy, matplotlib
+pip install "plotters @ git+ssh://git@github.com/Tagiix/plotters.git@v0.1.0"          # a pinned release
+pip install -U --force-reinstall --no-deps "plotters @ git+ssh://git@github.com/Tagiix/plotters.git"  # upgrade
 ```
 
-Core needs `pandas`, `numpy`, `plotly`. `scipy` is only for `plot_qq(dist="t")`, `plot_dendrogram` and the p value of `ljung_box` (imported lazily), and `matplotlib` only for `plotters.static`.
+With `uv`, into a project: `uv add "plotters @ git+ssh://git@github.com/Tagiix/plotters.git"`. Or list it in your project's `pyproject.toml` (or `requirements.txt` without the `dependencies = [...]` wrapper):
 
-For development (editable, with autocomplete working in VS Code / Pylance):
+```toml
+dependencies = ["plotters @ git+ssh://git@github.com/Tagiix/plotters.git@v0.1.0"]
+```
+
+Once the repository is public, `git+https://github.com/Tagiix/plotters.git` works as well.
+
+Core needs `pandas`, `numpy`, `plotly` and nothing else. `scipy` is only for `plot_qq(dist="t")`, `plot_dendrogram` and the p value of `ljung_box` (imported lazily; extra `stats`), and `matplotlib` only for `plotters.static` (extra `static`). The package ships type information (`py.typed`), so hover docs and completion work in your other projects too.
+
+**Editing the library while using it** (editable install; changes show up immediately in any project that uses this environment):
 
 ```bash
-git clone https://github.com/<you>/plotters && cd plotters
-uv venv && uv pip install -e ".[dev]"
+git clone git@github.com:Tagiix/plotters.git && cd plotters
+uv venv && uv pip install -e ".[dev]"      # or: python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 ```
 
 The build backend (hatchling) writes a plain static path for editable installs, so Pylance and pyright resolve the import with no extra flag.

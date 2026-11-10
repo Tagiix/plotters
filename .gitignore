@@ -6,3 +6,6 @@ gallery/
 .pytest_cache/
 .ruff_cache/
 Photos-1-001/
+Photos-1-001.zip
+*.zip
+plotters-other-ai/
