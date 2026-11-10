@@ -129,3 +129,12 @@ def test_bars_with_line_requires_series_bars(wide):
 def test_one_y_axis_only(wide):
     for fig in (pl.plot_series(wide, "t"), pl.plot_bars_with_line(wide["a"], wide["b"])):
         assert "yaxis2" not in fig.layout.to_plotly_json()
+
+
+def test_views_reuse_colours_from_the_start():
+    idx = pd.date_range("2020", periods=5)
+    data = pd.DataFrame({n: np.arange(5.0) for n in ["pool", "a1", "a2", "b1", "b2"]}, index=idx)
+    fig = pl.plot_series(data, views={"A": ["a1", "a2"], "B": ["b1", "b2"]})
+    color = {t.name: t.line.color for t in fig.data}
+    assert color["a1"] == color["b1"] and color["a2"] == color["b2"]
+    assert len({color["pool"], color["a1"], color["a2"]}) == 3

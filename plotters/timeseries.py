@@ -78,17 +78,41 @@ def _resolve_visibility(
     if unknown:
         raise KeyError(f"views name series that are not in the data: {unknown}")
 
+    out: dict[str, list[Visibility]] = {}
+    for view, ordered in _view_orders(names, views).items():
+        shown = {n: (True if i < drawn else "legendonly") for i, n in enumerate(ordered)}
+        out[view] = [shown.get(n, False) for n in names]
+    return out
+
+
+def _view_orders(names: Sequence[str], views: Mapping[str, Sequence[str]]) -> dict[str, list[str]]:
+    """The series of each view in draw order: common baselines first, then its own members."""
     named = {n for members in views.values() for n in members}
     baselines = [n for n in names if n not in named]
     if len(baselines) > MAX_SERIES:
         baselines = []
+    return {
+        view: baselines + [m for m in members if m not in baselines]
+        for view, members in views.items()
+    }
 
-    out: dict[str, list[Visibility]] = {}
-    for view, members in views.items():
-        ordered = baselines + [m for m in members if m not in baselines]
-        shown = {n: (True if i < drawn else "legendonly") for i, n in enumerate(ordered)}
-        out[view] = [shown.get(n, False) for n in names]
-    return out
+
+def _color_slots(names: Sequence[str], views: Mapping[str, Sequence[str]] | None) -> dict[str, int]:
+    """Palette slot of each series. With views, every view reuses the slots from the start, so
+    the dropdown does not walk down the palette; a series keeps one slot across the views it is in."""
+    if not views:
+        return {n: i for i, n in enumerate(names)}
+    slots: dict[str, int] = {}
+    for ordered in _view_orders(names, views).values():
+        taken = {slots[n] for n in ordered if n in slots}
+        free = (i for i in range(len(names) + 1) if i not in taken)
+        for n in ordered:
+            if n not in slots:
+                slots[n] = next(free)
+                taken.add(slots[n])
+    for n in names:  # dropped baselines or series in no view
+        slots.setdefault(n, len(slots))
+    return slots
 
 
 def _add_reference_lines(
@@ -239,9 +263,10 @@ def plot_series(
     first = next(iter(visibility.values()))
     st = _style.get_style()
 
+    slots = _color_slots([str(n) for n in names], views)
     fig = go.Figure()
     for i, (name, s) in enumerate(frames.items()):
-        line = _line(i)
+        line = _line(slots[str(name)])
         trace = go.Scatter(
             x=_x(s.index),
             y=s.to_numpy(),
