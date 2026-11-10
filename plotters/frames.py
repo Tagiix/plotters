@@ -39,6 +39,7 @@ def as_series_dict(
     Args:
         data: Series, wide DataFrame or ``{label: Series}``.
         value: Label for an unnamed Series.
+        _caller: Name of the calling plotter, used in error messages.
 
     Returns:
         A new dict, in input order. Labels are converted to ``str``.

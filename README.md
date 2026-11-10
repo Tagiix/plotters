@@ -1,365 +1,216 @@
 # plotters
 
-Modular plotly charts for forecasting and model comparison. Generic pandas in, a plotly `Figure` out.
+Generic plotly charts with one consistent, colour-blind-safe look. Pandas in, a themed plotly `Figure` out.
 
-Nothing calls `.show()` — the caller decides. Analysis helpers also return the statistics and series behind their figures.
-
-## What to pass: four input conventions
-
-There are **four**, not one, and picking the wrong one is the most common error. The first argument tells you which:
-
-| Convention | First arg | Who uses it |
-|---|---|---|
-| **A. Series-like** | `data` — a Series, a **wide** DataFrame (one series per column), or a `{label: Series}` dict | every time-series and distribution plotter, plus `plot_acf` / `plot_acf_grid` |
-| **B. Long frame + column names** | `frame` — a **long/tidy** DataFrame, then `x=`, `y=`, `label=` ... as *column name* strings | `plot_tradeoff`, `plot_scatter`, `plot_shaded_scatter`, `plot_rank_heatmap`, `plot_small_multiples`, `plot_box_series` |
-| **C. Two positional series** | `bars` (a Series) and `line` (Series or dict) | `plot_bars_with_line` only |
-| **D. Wide / square frame as-is** | `frame` — rows and columns are already the two axes, cells are the values | `plot_matrix`, `plot_table_heatmap`, `plot_contours`; `plot_correlation` takes the data, not its matrix |
-
-The shapes are not interchangeable. Verified:
-
-```
-plot_series          Series=OK  DataFrame=OK  dict=OK       <- convention A
-plot_box             Series=OK  DataFrame=OK  dict=OK
-plot_histogram       Series=OK  DataFrame=OK  dict=OK
-plot_expectile_curve Series=OK  DataFrame=OK  dict=OK
-
-plot_scatter         Series=AttributeError  DataFrame(wide)=KeyError  dict=AttributeError
-plot_tradeoff        Series=AttributeError  DataFrame(wide)=KeyError  dict=AttributeError
-plot_scatter         long frame -> OK                                  <- convention B
-```
-
-A wide DataFrame given to a convention-B plotter raises `KeyError` (your `x=` is not a column); a Series or dict raises `AttributeError`. Both mean "wrong convention", not "bad data".
-
-### Convention A — Series, wide DataFrame, or dict
-
-`plot_series`, `plot_cumulative`, `plot_drawdown`, `plot_stacked`, `plot_rolling`, `plot_box`, `plot_histogram`, `plot_ecdf`, `plot_qq`, `plot_cumulative_share`, `plot_expectile_curve`.
-
-All three shapes go through `as_series_dict`, so the chart code never knows which it got:
-
-| You pass | Becomes |
-|---|---|
-| `Series` | one series, named from `.name` |
-| `DataFrame` | **one series per column** — so it must be wide, not tidy |
-| `{label: Series}` | itself |
-
-Use `long_to_wide(frame, index=, columns=, values=)` to get from tidy to wide, or `group_values(frame, by=, value=)` to get a dict straight from a long frame.
-
-**Subsetting and colour order.** Convention-A plotters take a list that both picks a subset *and* fixes the order, which is what assigns colour slots:
-
-```
-series=['c','a']   traces: ['c', 'a']        # your order, not the frame's
-default            traces: ['a', 'b', 'c']
-series=['zz']      KeyError: "['zz'] not in ['a', 'b', 'c']"
-```
-
-The argument is `series=` everywhere **except `plot_box`**, where it is `groups=`. Same behaviour, different name — `plot_box`'s columns are groups rather than series. Two differences there: passing `groups=` **disables the median sort** (your order wins, and `sort=` becomes irrelevant), and the order is read bottom-to-top on the default `horizontal=True`, so the first name you list appears at the top of the chart. It is not about colour — a box summarises many points, so `plot_box` uses a single hue throughout and the category axis does the naming.
-
-### Convention B — long frame plus column names
-
-`plot_tradeoff(frame, x, y, label)`, `plot_scatter(frame, x, y)`, `plot_rank_heatmap(frame, index, columns, values)`, `plot_small_multiples(frame, panel, x, y)`.
-
-Every one of those keyword arguments is a **string naming a column**, never data. One row per observation.
-
-`group=` and `label=` are different things and easy to swap:
-
-```
-plot_scatter(long, x='cost', y='error', group='model')  -> traces: ['m1', 'm2']
-plot_scatter(long, x='cost', y='error', label='model')  -> 1 trace, point annotations
-```
-
-`group=` splits into one coloured series per value (subject to `MAX_ALL_PAIRS = 3`); `label=` keeps one series and writes the text next to each point. `label_from()` builds a label column from several columns.
-
-### The two that look like A but are not
-
-- `plot_bars_with_line(bars, line, ...)` takes two positional arguments. `bars` must be a single Series — a dict raises `AttributeError`. `line` follows convention A, so a dict there compares several predictions against the same bars.
-- `plot_paired_difference(data, base=...)` is convention A, but `base=` is the **name of one of the series**, not a column of a long frame. With a dict input, `base` is a dict key.
-
-### `bands=` is not data either
-
-`plot_series(..., bands={"target": 1.0})` — a `{label: y_value}` dict of horizontal reference lines. Scalars, not series.
-
-### `views=` is a dropdown, not a second chart
-
-`plot_series(..., views={"pooled": ["pooled"], "ESc1": ["ESc1 ewrms", "ESc1 har"]})` puts a menu at the top left that swaps between named subsets of the series already passed. Every series is drawn **once** and the menu toggles `visible`, so the data travels with the figure and an exported HTML keeps working with no callback and no server. The first view is shown on open.
-
-A series named in **no** view stays visible in all of them — which is how a pooled baseline sits behind each per-ticker view without being repeated in every list.
-
-`plot_series` has **no total or per-view series limit.** Every eligible series is retained, but only the first 20 start visible. Additional series are available through the legend, including after switching views.
-
-Past `MAX_SERIES` unnamed series, the always-visible rule is dropped and the views are read as an explicit allowlist: a caller showing its best 8 of 42 would otherwise leave 654 columns "unnamed" and therefore drawn in every view.
-
-`drawn=8` starts with eight series and leaves the rest `legendonly` — greyed out in the legend, one click to add. This works with or without views. `drawn=0` (the default) starts with 20; larger values also start with 20. Common baselines precede the view's members and count towards this initial total. Order each view's list best-first; without views, input order (or `series=` order) determines the prefix. You can enable any number afterwards. Large views use a scrollable vertical legend on the right so the plot keeps its height. Colours and dashes eventually repeat. This changes only `plot_series`; other chart forms retain their existing guards. A caller that truncates its data or view lists before calling the plotter still needs its own limit increased.
+Nothing calls `.show()`: the caller decides. Analysis helpers also return the statistics and series behind their figures.
 
 ```python
 import plotters as pl
 
-pl.set_style(dark=True)                                          # once, at the top
+pl.set_style(dark=False)                                  # once, at the top
 
-pl.plot_series(returns, "Daily returns", percent=True)           # one line per column
-pl.plot_box(by_group, reference=1.0)                             # rank groups by median
+pl.plot_series(returns, "Daily returns", percent=True)    # one line per column
+pl.plot_box(by_group, reference=1.0)                      # rank groups by median
+pl.plot_bars({"cats": 42, "dogs": 31, "birds": 12})       # straight from a dict of counts
 pl.plot_tradeoff(table, x="cost", y="error", label="model", logx=True)
 ```
 
 ## Install
 
-```
-pip install -e . --config-settings editable_mode=compat
-```
-
-Needs `pandas`, `numpy`, `plotly`. `scipy` only for `plot_qq`, imported lazily.
-
-The `editable_mode=compat` flag matters for autocomplete. A plain `pip install -e .` writes a `.pth` that *executes* an import-hook finder:
-
-```
-import __editable___plotters_0_2_0_finder; __editable___plotters_0_2_0_finder.install()
+```bash
+pip install "plotters @ git+https://github.com/<you>/plotters.git"             # core
+pip install "plotters[stats,static] @ git+https://github.com/<you>/plotters.git"  # + scipy, matplotlib
+uv add "plotters @ git+https://github.com/<you>/plotters.git@v0.1.0"          # pin a tag
 ```
 
-Nothing on disk is then named `plotters/`, and Pylance/pyright never run code — so the import resolves at runtime but static analysis reports `Import "plotters" could not be resolved`, with no completion. `compat` writes a plain static path instead, which both follow:
+Core needs `pandas`, `numpy`, `plotly`. `scipy` is only for `plot_qq(dist="t")` (imported lazily) and `matplotlib` only for `plotters.static`.
 
+For development (editable, with autocomplete working in VS Code / Pylance):
+
+```bash
+git clone https://github.com/<you>/plotters && cd plotters
+uv venv && uv pip install -e ".[dev]"
 ```
-$ cat site-packages/__editable__.plotters-0.2.0.pth
-/home/user/plotters
 
-$ pyright a_file_importing_plotters.py
-0 errors, 0 warnings, 0 informations
+The build backend (hatchling) writes a plain static path for editable installs, so Pylance and pyright resolve the import with no extra flag.
+
+## Hover documentation
+
+Every public function has a docstring listing its arguments, defaults and what it raises, and `Literal[...]` types show the allowed values. In VS Code, hover a function or press `K` on it to read it.
+
+## What to pass: five input conventions
+
+The first argument tells you which one a plotter uses. Picking the wrong one is the most common error, so the library names the convention in a `ConventionError` instead of failing deep inside pandas.
+
+| Convention | First argument | Used by |
+|---|---|---|
+| **A. Series-like** | `data`: a Series, a **wide** DataFrame (one series per column), or `{label: Series}` | time series, distributions, correlogram, analysis |
+| **B. Long frame + column names** | `frame`: a **long/tidy** DataFrame, then `x=`, `y=`, `label=` ... as *column name* strings | comparisons |
+| **C. Two positional series** | `bars` (a Series) and `line` (Series or dict) | `plot_bars_with_line` |
+| **D. Wide / square frame as-is** | `frame`: rows and columns are the two axes, cells are the values | matrices, `plot_grouped_bars` |
+| **E. Label → number** | a `{label: number}` dict, or a Series indexed by label (`value_counts()` works) | `plot_bars`, `plot_lollipop`, `plot_waterfall` |
+
+```python
+pl.plot_scatter(frame_wide)            # ConventionError: plot_scatter expects a long (tidy) DataFrame
+                                       # followed by column-name strings (convention B); got dict.
 ```
 
-Redo it in each new env. If you have already installed the other way, reinstalling with the flag is enough; restart the language server afterwards.
+Convert between shapes with `long_to_wide`, `group_values`, `as_series_dict`, `as_value_series`.
+
+**Subsetting and colour order.** Convention-A plotters take `series=[...]`, which both picks a subset *and* fixes the order, and the order assigns the colour slots. An unknown name raises `KeyError: "['zz'] not in ['a', 'b', 'c']"`. It is `series=` everywhere, including `plot_box`.
+
+**`group=` and `label=` differ.** `group="model"` splits into one coloured series per value (at most 3, since scatter is read pair by pair); `label="model"` keeps one series and writes the text next to each point. `groups={family: prefixes}` collapses many members into families (the longest prefix wins) so colour means family and shape means member.
 
 ## The charts
 
-### Time series — `plotters.timeseries`
+### Time series: `timeseries`
 
-All convention **A** (Series / wide DataFrame / dict) except `plot_bars_with_line`.
+| Function | For |
+|---|---|
+| `plot_series` | One line per series: the workhorse. `percent`, `logy`, `logx`, `slider`, `fill`, `bands` (horizontal reference lines), `markers` (vertical), `views` (dropdown over named subsets), `max_visible` |
+| `plot_bars_with_line` | Realised as bars, prediction as lines on one axis. Did it track or lag? |
+| `plot_cumulative` | Wealth curve from per-period values; `compound=True` for reinvested |
+| `plot_drawdown` | Drop from the running peak, filled because the area *is* the quantity |
+| `plot_stacked` | Parts of a whole; refuses negative parts; `normalize=True` for shares |
+| `plot_rolling` | A rolling statistic over the raw series in lighter ink |
 
-| Function | Takes | For |
-|---|---|---|
-| `plot_series` | `data` | one line per series. The workhorse. `percent`, `logy`, `logx`, `slider`, `fill`, `bands` (horizontal lines), `markers` (vertical), `views` (dropdown over named subsets), `drawn` (start with at most 20; unlimited extras selectable in the legend) |
-| `plot_bars_with_line` | `bars` (Series), `line` (A) | realised as bars, prediction as a line, one axis. Did it track or lag? |
-| `plot_cumulative` | `data` | wealth curve from per-period values. `compound=True` for reinvested |
-| `plot_drawdown` | `data` | drop from the running peak, filled because the area *is* the quantity |
-| `plot_stacked` | `data` | parts of a whole. Refuses negative parts |
-| `plot_rolling` | `data`, `window` (int) | a rolling statistic over the raw series in lighter ink. `how="mean"`/`"std"`/… |
+`plot_series` has **no series limit**: every series is kept but only the first `max_visible` (default 20) start drawn, the rest sit greyed out in the legend, one click to add. With `views={"A": [...], "B": [...]}` a dropdown swaps named subsets of the lines already passed (each series is drawn once and the menu toggles `visible`, so an exported HTML keeps working with no server). A series named in no view stays visible in all of them: a pooled baseline sits behind each per-ticker view without repeating it. Past 8 such series the views become an explicit allowlist.
 
-All of these take `series=` to subset and order, except `plot_bars_with_line`.
+### Statistics and analysis: `stats`, `analysis`
 
-### Series analysis — `plotters.analysis` / `plotters.statistics`
-
-Convention A. Use the individual functions for one table or chart, or `analyze_series` for the table and the paths together.
-
-| Function | Takes | For |
-|---|---|---|
-| `analyze_series` | `series` | statistics and five figures: values, absolute values, cumulative sums, cumulative absolute sums, histogram. `normalize=`, `center=`, `pooled=`, `bins=`, `quantiles=` |
-| `compare_series` | `data`, `reference=` | several series on the same dates, their cumulative paths and differences against one reference. `align="inner"`/`"outer"` |
-| `plot_series_distribution` | `data` | histogram with a dropdown, statistical annotations and quantile markers. `statistics=`, `display_stats=`, `quantiles=`, `normal_reference=` |
-| `series_statistics` | `data` | one row per series: moments, quantiles, tail frequencies and turnover. `thresholds=` changes the tail cut-offs; `metrics={name: callable}` adds scalar statistics |
-| `series_turnover_ratio` | `series` | mean absolute adjacent change / mean absolute level. `group_level=` keeps MultiIndex differences within each series |
-| `normalise_series` | `data`, `method=` | transformed series, means and scales. `method="std"`/`"rms"`/`None`, `center=`, `ddof=` |
+| Function | For |
+|---|---|
+| `analyze_series` | Statistics plus five figures (values, absolute values, cumulative sum, cumulative absolute sum, histogram), each with a pooled view and one view per series |
+| `compare_series` | Several series on the same dates against one reference (`align="inner"/"outer"`); differences are reference minus the others |
+| `plot_series_distribution` | Histogram with a dropdown, statistics block and quantile markers |
+| `series_statistics` | One row per series: moments, quantiles, tail frequencies, turnover; `metrics={name: callable}` adds columns |
+| `series_turnover_ratio` | Mean absolute adjacent change over mean absolute level; gaps break the differences |
+| `normalize_series` | Per-series scaling (`"std"` / `"rms"`), returns the series, means and scales |
+| `sample_expectile`, `acf_values`, `bartlett_band` | The numbers behind `plot_expectile_curve` and the correlogram |
 
 ```python
-analysis = pl.analyze_series(
-    data, bins=100, pooled=True,
-    normalize=None, center=False,
-    quantiles=(0.01, 0.5, 0.99),
-    display_stats=("mean", "std", "skewness", "excess_kurtosis", "turnover_ratio"),
-)
-display(analysis["stats"])
-for fig in analysis["figures"].values():
-    display(fig)
+out = pl.analyze_series(returns, bins=100, normalize="std", quantiles=(0.01, 0.5, 0.99))
+out["stats"]                          # DataFrame
+pl.show_all(out["figures"])           # every figure from one notebook cell
 ```
 
-**A pooled distribution and a pooled path are different quantities.** The histogram stacks observations with equal weight per observation; the time plots average available series at each index value. Absolute paths average magnitudes *before* accumulation. Set `pooled=False` when combining the inputs' units would make no sense. Each series still has its own dropdown view.
+A pooled **distribution** and a pooled **path** are different quantities: the histogram stacks observations with equal weight per observation, while the time plots average the series available at each index value. Set `pooled=False` when combining the inputs' units makes no sense.
 
-`normalize="std"` or `"rms"` scales each series by its own full retained sample; `center=True` also subtracts its mean. This is descriptive normalisation, not a causal transform. `cut` removes leading rows after sorting each input's index. Reference series must already be in the plotted units; they are not rescaled automatically.
+Histogram limits (`hist_range`) never erase tail probability: values outside the window stay in the density denominator. `normal_reference=True` overlays N(0, 1), not a fitted normal.
 
-**Histogram limits do not erase tail probability.** Values outside `hist_range` stay in the density denominator. Quantile markers use the full sample and change with the dropdown. `normal_reference=True` overlays N(0,1), not a fitted normal. Tail frequencies in the table refer to the input values; no standardisation is implied.
+### Figure views: `views`
 
-Missing and infinite values are excluded from moments. They break adjacent turnover differences rather than creating a change across the gap. Default pooled turnover keeps differences within each input series; a custom `turnover_ratio` callback is pooled using observation-count weights. Standard deviation uses `ddof=0`; skewness and excess kurtosis use pandas' sample corrections.
+`plot_views({"Raw": fig_a, "Normalised": fig_b})` merges prepared figures into one with a dropdown; traces, axes, annotations, shapes and legend switch together. `annotate_views(fig, {view: text})` adds a top-right annotation that changes with the dropdown. Cartesian figures only; existing menus, sliders, frames and non-Cartesian traces raise rather than silently losing interactions.
 
-`compare_series(data, reference="baseline")` returns `data`, `cumulative`, `difference`, `stats` and `figures`. Differences are *reference minus each other series*. `align="inner"` uses common finite observations for all inputs; `"outer"` retains gaps and each difference uses its own available pairs. More series do not create all pairs. The first series is the reference when none is named.
+### Distributions: `distributions`
 
-### Figure views — `plotters.views`
+| Function | For |
+|---|---|
+| `plot_null_test` | A simulated distribution with the tested value and the rejection region shaded: the picture of a hypothesis test. The p value is counted from the distribution |
+| `plot_box` | One box per group ranked by median: the ranking chart. `points=True`, `reference=`, `logvalue=` |
+| `plot_histogram` | Overlaid distributions on shared bins, optional normal fit |
+| `plot_ecdf` | The distribution with no bin-width choice; `complementary=True` with `logy=True` for tails |
+| `plot_qq` | Against the normal, or `dist="t"` for Student-t with ν fitted by maximum likelihood (needs scipy). Reference line through the IQR |
+| `plot_cumulative_share` | How concentrated a total is, against a "paid evenly" diagonal |
+| `plot_expectile_curve` | The tau expectile over each series' own mean against tau. The slope is the reading |
 
-Prepared figures in, one dropdown figure out. Use this when the views have different annotations, shapes or axes; use `plot_series(views=)` for subsets of the same lines.
+`plot_qq(dist="t")` is the one to reach for on fat tails: a normal QQ bends at both ends and stops there, saying the normal is wrong but not what is right. On a simulated t(5) sample the fit recovers ν ≈ 5.
 
-| Function | Takes | For |
-|---|---|---|
-| `plot_views` | `{view_name: Figure}` | switch traces, axes, legend, annotations and shapes together. `title=`, `height=`, `dropdown_x=`, `dropdown_y=` |
-| `annotate_views` | `fig`, `{view_name: text}` | add a changing top-right annotation to an existing dropdown; modifies and returns the figure |
+### Autocorrelation: `correlogram`
 
-```python
-fig = pl.plot_views({"Raw": raw_figure, "Normalised": normalised_figure})
-```
+`plot_acf` draws a stem from zero to each coefficient, a marker at the tip, and the significance band as a ribbon. **The band widens with the lag**, and that is the point: Bartlett's formula inherits the autocorrelation already present at shorter lags and equals the textbook `1.96/√n` only at lag 1. `absolute=True` plots `acf(|x|)`: on a return series `acf(x)` asks whether the sign is predictable, `acf(|x|)` whether the magnitude is (volatility clustering, the ARCH case). `plot_acf_grid` gives each series its own panel and band, with no series cap.
 
-The first view opens initially. Source figures are copied, including their originally hidden traces. Cartesian figures only: existing menus, sliders, animation frames and non-Cartesian traces raise rather than losing their interactions.
+### Matrices: `matrices`
 
-### Distributions — `plotters.distributions`
+Colour by **value** (a rank would discard magnitude).
 
-All convention **A**. Each series is treated as a bag of values — the index is ignored, so these take an unindexed Series happily.
+| Function | For |
+|---|---|
+| `plot_matrix` | Any wide/square frame. A frame straddling `center` gets the diverging ramp with a symmetric range, otherwise the single-hue ramp |
+| `plot_correlation` | Correlation between columns (takes the **data**), diverging about 0, diagonal masked; `method="spearman"` for fat tails |
+| `plot_table_heatmap` | A table whose columns are on different scales (a moments table); each column shaded on its own range, actual values written in |
+| `plot_contours` | A function of two variables as labelled level curves, from a grid you evaluated yourself |
 
-| Function | Takes | For |
-|---|---|---|
-| `plot_null_test` | `null`, `observed`, `alpha=` | a simulated distribution with the tested value on it and the rejection region shaded — **the picture of a hypothesis test**. Reads either way round: null centred on H0 with `observed` = the statistic, or the statistic's own bootstrap with `observed` = 0. The p is counted from the distribution, not read off a normal |
-| `plot_box` | `data`, `groups=` | one box per group, sorted by median. **The ranking chart.** `reference=`, `points=`, `sort=`, `name_points=`, `logvalue=` (log value axis, for a tail decades past the box) |
-| `plot_histogram` | `data`, `series=` | overlaid distributions, optional normal fit. `bins=`, `density=` |
-| `plot_ecdf` | `data`, `series=` | the distribution with no bin-width choice. Better for tails |
-| `plot_qq` | `data`, `series=`, `dist=` | QQ against the normal, or `dist="t"` for Student-t with `nu` fitted by MLE. Reference line fitted through the IQR |
-| `plot_cumulative_share` | `data`, `series=` | how concentrated a total is, against a "paid evenly" diagonal |
-| `plot_expectile_curve` | `data`, `series=`, `taus=` | the tau expectile over each series' OWN mean, against tau. **The slope is the reading** |
+Cell text is coloured from the **measured luminance** of each fill, never from a position threshold: the dark-mode diverging ramp has a dark midpoint, so a threshold rule puts dark text on dark fill.
 
-Note `plot_box` spells the subset argument `groups=`; the other five use `series=`.
+### Comparisons: `comparisons`
 
-`plot_expectile_curve` answers "do a few large observations carry the mean?" Every curve is divided by its own mean, so all of them pass through 1 at `tau = 0.5` and the only thing to read is the slope of the right half. Unlike a quantile, an expectile responds to how *large* the exceedances are and not only how many. Measured on two lognormals, `expectile(0.95) / mean`: 1.75 at sigma 0.5 against 5.01 at sigma 1.5. Normalising per series is deliberate — the question is concentration, not level, so series on different scales belong on one picture. `sample_expectile(values, tau)` is exported from the same module if you want the number rather than the chart.
+| Function | For |
+|---|---|
+| `plot_tradeoff` | Two competing objectives and the Pareto frontier; `lower_is_better`, `groups=`, `connect=` |
+| `plot_rank_heatmap` | Items by contexts coloured by rank within each context (the one chart that colours by rank) |
+| `plot_box_series` | A box at each numeric `x`, medians joined into a curve per group |
+| `plot_small_multiples` | One panel per value of `panel`, shared legend |
+| `plot_paired_difference` | Cumulative difference against a baseline series (`base` names a series) |
+| `plot_scatter` | Two columns, optional `y = x` diagonal |
+| `plot_shaded_scatter` | Two columns plus a continuous third as colour, with a colourbar |
+| `plot_interval` | One horizontal interval per row; intervals crossing `reference` are hollow (not separable) |
 
-`plot_qq(dist="t")` is the one to reach for on fat tails. A normal QQ on a fat-tailed series bends at both ends and stops there — it says the normal is wrong, not what is right. The t reference answers that, and `nu` comes from an MLE fit per series unless you pass it. On a simulated `t(5)` sample the departure from the reference line falls from 6.169 to 1.472 and the fit recovers `nu = 5.47`. `standardise` defaults ON for `dist="t"`, since the t quantiles are scaled to unit variance.
+`plot_box_series` needs a **numeric x**, and that is not a style choice: a plotly `Box` width is in data units, so the same width renders many times wider at one end of a log axis than the other. The axis is linear, ticked at the values that exist, and the width comes from the tightest gap divided by the group count.
 
-### Autocorrelation — `plotters.correlogram`
+`lower_is_better` is a bool or a `(x_flag, y_flag)` pair wherever two axes exist.
 
-Convention A. The form is deliberately statsmodels' `plot_acf`: a stem from zero to each coefficient, a marker at the tip, the significance band as a ribbon behind.
+### Categorical and relationships: `categorical`
 
-| Function | Takes | For |
-|---|---|---|
-| `plot_acf` | `data`, `lags`, `absolute=` | one correlogram, band drawn when there is a single series |
-| `plot_acf_grid` | `data`, `lags`, `ncols=` | one panel per series, **each with its own band**. No series cap |
-| `acf_values` | `series`, `lags` | the coefficients alone, denominator `N` |
-| `bartlett_band` | `coefficients`, `n`, `alpha=` | the half-width at each lag |
+| Function | For |
+|---|---|
+| `plot_bars` | Bars from a `{label: number}` dict or a Series, value written at each tip. `sort`, `top`, `normalize` |
+| `plot_counts` | `value_counts` and the bars in one call |
+| `plot_grouped_bars` | A few series across categories; `stacked`, `normalize` |
+| `plot_lollipop` | Stems and dots: less ink, good for many categories or negative values |
+| `plot_dumbbell` | Before and after per item |
+| `plot_waterfall` | Contributions adding up to a total |
+| `plot_line_band` | A line with an uncertainty ribbon |
+| `plot_regression` | Scatter with an OLS fit and a 95% band (numpy only) |
+| `plot_scatter_matrix` | Pairwise scatter of up to 6 columns with diagonal histograms |
+| `plot_calendar_heatmap` | A daily series as a weekday-by-week grid |
 
-**The band widens with the lag, and that is the point.** Bartlett's formula is `var(r_k) = (1 + 2·Σ_{j<k} r_j²)/n`, so the sampling error at lag *k* inherits the autocorrelation already present at shorter lags; it collapses to the textbook `1.96/√n` only at `k = 1`. A flat line is wrong at every other lag. Checked against statsmodels: coefficients agree to 4e-16 and the band to 1.2e-06 (the residual is a rounded z). No statsmodels dependency.
+### Data shaping: `frames`
 
-`absolute=True` plots the acf of `|x|`. On a return series the two ask different questions — `acf(x)` tests whether the **sign** is predictable, `acf(|x|)` whether the **magnitude** is, which is volatility clustering. A series can be serially uncorrelated and still strongly clustered; that is the ARCH case. The band is pointwise, so ~1 lag in 20 escapes by chance: read the profile, not one stem.
+| Function | Returns |
+|---|---|
+| `long_to_wide(frame, index, columns, values)` | Wide DataFrame. **Orders numeric columns numerically**, otherwise `pivot` sorts them as strings and `126` lands between `18` and `21` |
+| `group_values(frame, by, value, keep=)` | `{group: Series}`, ordered by median unless `keep` fixes it |
+| `normalize_within(frame, value, within, how="min")` | `value` divided by its own group's reference |
+| `group_by_prefix(labels, {group: (prefix, ...)}, other=)` | Group names by the **longest** matching prefix; raises on an unmatched label unless `other` is given |
+| `label_from(frame, *columns, sep=" ")` | Labels for `label=`; NaN parts are skipped |
+| `as_series_dict`, `as_value_series`, `pick` | The convention normalisers, and subsetting in the order given |
 
-`plot_acf_grid` exists rather than overlaying because the band depends on the series' own length *and* its own shorter-lag coefficients, so a shared band would be wrong for all but one series.
+### Print figures: `plotters.static`
 
-### Matrices — `plotters.matrices`
-
-Convention D. These colour by **value**, where `plot_rank_heatmap` colours by rank.
-
-| Function | Takes | For |
-|---|---|---|
-| `plot_matrix` | `frame`, `diverging=`, `centre=`, `mask_diagonal=` | any wide/square frame on its own values |
-| `plot_correlation` | `frame` (the *data*), `method=` | correlation between columns, diverging about 0, diagonal masked |
-| `plot_table_heatmap` | `frame`, `normalise="column"` | a table whose columns are on **different scales** — a moments table |
-| `plot_contours` | `frame`, `logx=`, `logy=`, `diagonal=` | a function of two variables as labelled contours. Index is y, columns are x, cells the value |
-
-`plot_contours` takes the grid already evaluated, so the caller owns the maths: build `frame` with `np.meshgrid` and whatever function, then pass it. Contours rather than a 3-D surface on purpose — a surface hides its own far side and cannot be read off, while labelled level curves give exact values. `diagonal=True` draws `y = x`, the line where the two arguments agree, which is the reference for any `f(a, b)` that should vanish at `a = b`.
-
-**When rank is the wrong encoding.** A rank discards magnitude, which is fine for "which model is best in this column" and wrong everywhere else. Measured on a correlation matrix: `corr = 0.971` and `corr = -0.020` both come out rank 2, i.e. the same colour, and the subtitle claims "1 = best". A moments table is worse — there is no "better", ranking `skew` ascending calls `-1.2` the worst when its magnitude makes it the most notable, and a constant column like `n` gets a meaningless uniform rank.
-
-`plot_matrix` picks the scale from the data: a frame straddling `centre` gets the two diverging poles with the range forced symmetric, or the neutral midpoint would lie about where zero is. One that does not straddle gets the single-hue ramp.
-
-`plot_correlation` takes the **data frame, not a correlation matrix** — computing it inside is what keeps the scale symmetric and the diagonal masked. The diagonal is 1.0 by construction and would otherwise own the whole top of the scale. Pass `method="spearman"` on fat-tailed series.
-
-The ink on each cell is chosen from the fill's **measured luminance**, not from a position threshold: the dark-mode diverging ramp has a dark midpoint, so a threshold rule put dark text on dark fill for 9 cells of 21. Worst fill-to-ink luminance gap is now 0.450 across both modes and both scales, against a floor of 0.33.
-
-### Print figures — `plotters.static`
-
-Not imported by `plotters/__init__.py` — it needs matplotlib, which the plotly side does not. `from plotters import static as ps`.
+Not imported by `plotters/__init__.py`: it needs matplotlib. `from plotters import static as ps`.
 
 ```python
 import plotters as pl
 from plotters import static as ps
 
-pl.set_style(dark=False)        # same palette as the plotly charts
-ps.use_print_style()            # rcParams : serif, 9pt, the palette's inks
+pl.set_style(dark=False)                 # same palette as the plotly charts
+ps.use_print_style()                     # rcParams: serif, 9 pt, the palette's inks
 figure = ps.plot_lines(frame, title="...", ylabel="...", label_last=True)
-ps.save(figure, "figures/thing.png")    # 300dpi, closes the figure
+ps.save(figure, "figures/thing.png")     # 300 dpi, closes the figure
 ```
 
-| Function | Takes | For |
-|---|---|---|
-| `plot_lines` | `data` (A) | one line per series. `label_last=` writes names at the line ends instead of a legend |
-| `plot_points` | `frame`, `x`, `y` (B) | scatter, optional `frontier=True` for the Pareto front |
-| `plot_ranked_bars` | `values` (Series) | sorted bars with the value written at each tip. **The ranking figure for print** |
-| `plot_heatmap` | `frame` (D) | a matrix on its own values, every cell written in. `diverging=`, `centre=` |
-| `plot_function` | `{label: callable}`, `x` | the shape of a loss, not data. `marks=` for a vertical reference |
-| `plot_stems` | `values`, `band=` | a correlogram. `band` is the half-width per lag, so `bartlett_band`'s widening draws itself |
-| `plot_panels` | `{panel: data}` | a grid, one shared legend, labels on the edges only |
+`plot_lines`, `plot_points` (with `frontier=True`), `plot_ranked_bars`, `plot_heatmap`, `plot_function`, `plot_stems` (a correlogram with a per-lag band) and `plot_panels`. `figure_size(width=0.86)` gives inches for that fraction of `\textwidth` at a4paper with 2.2 cm margins. **Size here, never with `includegraphics[scale=]`**: scaling in LaTeX scales the figure's text too.
 
-`figure_size(width=0.86)` gives inches for that fraction of `\textwidth` at a4paper with 2.2cm margins. **Size here, never with `includegraphics[scale=]`** — scaling in LaTeX scales the figure's text too, so two figures at different scales end up with different apparent font sizes on the same page.
+What changes for print: `vary_dash` defaults ON (no legend to click, and four solid lines photocopy as one); end-of-line labels are nudged apart; subtitles wrap to the axes width; cell ink comes from measured luminance; `percent=True` writes a bare `%`.
 
-**What changes for print, and why.**
+## Theme
 
-- `vary_dash` defaults ON, unlike `line_style`'s first six solid slots. On screen the legend isolates a series on click; a printed page has no legend to click, and photocopied or read by a colourblind reader four solid lines are one line.
-- End-of-line labels are nudged apart (`_label_ends`). Two curves finishing at the same height overprinted and both became unreadable — worse than the legend it replaces.
-- Subtitles wrap to the axes width. A figure is embedded at its own size, so an overlong subtitle runs off the *page*; nothing clips it.
-- Cell ink comes from measured luminance, as in `matrices` — the diverging ramp's midpoint is dark in one mode and light in the other.
-- `percent=True` writes a bare `%`. The PNG is a raster, so matplotlib draws that text and a LaTeX escape would print the backslash.
+`set_style(dark=False)` chooses the palette and installs a plotly template, so even a plain `go.Figure()` created afterwards gets the fonts, colours and grid. `use_style(dark=True)` is a context manager that restores the previous theme. `set_style("auto")` reads the `PLOTTERS_STYLE` environment variable.
 
-### Comparisons — `plotters.comparisons`
-
-Convention **B** (long frame + column-name strings), except `plot_paired_difference` which is convention A.
-
-| Function | Takes | For |
-|---|---|---|
-| `plot_tradeoff` | `frame`, `x`, `y`, `label`, `group=`, `groups=` | two competing objectives + the Pareto frontier. "You cannot have both". `lower_is_better=(bool, bool)` says which corner wins. `groups={family: prefixes}` collapses `group`'s values by longest prefix, so colour means family and shape means member. `connect=` joins each group's points along a numeric column, turning a cloud into one path per group |
-| `plot_rank_heatmap` | `frame`, `index`, `columns`, `values` | items × contexts coloured by rank. No series cap. `index` = rows, `columns` = contexts |
-| `plot_box_series` | `frame`, `x=`, `y=`, `group=`, `label=`, `points=` | a box at each numeric `x`, medians joined so each group reads as a curve. The line is the subject, the boxes are its error bars |
-| `plot_small_multiples` | `frame`, `panel`, `x`, `y`, `group=` | one panel per value of `panel`, shared legend. `ncols=`, `shared_y=` |
-| `plot_paired_difference` | `data` (A), `base` | cumulative difference vs a baseline. Steady slope or one cliff? `base` names a series, not a column |
-| `plot_scatter` | `frame`, `x`, `y`, `group=` / `label=`, `xlabel=` / `ylabel=` | two columns, optional `y = x` diagonal |
-| `plot_shaded_scatter` | `frame`, `x`, `y`, `shade`, `label=`, `log_shade=`, `reference=` | two columns plus a **continuous** third as colour, with a colourbar. Use instead of `plot_scatter(group=)` when the third variable is a quantity rather than a category — `group=` caps at three hues and throws the gradient away. `log_shade=True` for a geometric ratio |
-| `plot_interval` | `frame`, `low`, `high`, `point`, `label=`, `group=`, `reference=` | one horizontal interval per row with a marker at `point` — "is this difference bigger than its own uncertainty". An interval crossing `reference` is the visual form of *not separable*. `sort=` orders by `point`, `lower_is_better=` is a plain `bool` |
-
-`plot_box_series` needs a **NUMERIC x, and that is not a style choice.** A plotly `Box` width is in data units, so the same `width` renders many times wider at one end of a log axis than the other — which is why the x axis here is linear, ticked at the values that exist, and a non-numeric `x` raises. The width itself comes from the *tightest* gap between two x values divided by the group count, so the cluster occupies a fixed share of it whatever the series count; a hardcoded width fills most of the narrowest gap on an uneven grid. And the boxes sit at an *explicit* x with a per-group nudge rather than using `boxmode="group"`, because a grouped box is offset from its category centre and the median line would then miss its own boxes.
-
-`x`, `y`, `label`, `group`, `panel`, `index`, `columns`, `values` are all **column-name strings**. `lower_is_better` is the one that bites: it is a 2-tuple on `plot_tradeoff` (one flag per axis) but a plain bool on `plot_rank_heatmap`.
-
-### Data shaping — `plotters.frames`
-
-Useful on their own, and the bridge between the two conventions — all take a **long frame** and a few column names:
-
-| Function | Takes | Returns |
-|---|---|---|
-| `long_to_wide` | `frame`, `index`, `columns`, `values` | wide DataFrame, for convention A. **Reorders numeric columns numerically** — otherwise `pivot` sorts them as strings and `126` lands between `18` and `21`, which makes every line chart zigzag |
-| `group_values` | `frame`, `by`, `value`, `keep=` | `{group: Series}`, for the distribution plotters. Ordered by median unless `keep` fixes it |
-| `normalise_within` | `frame`, `value`, `within`, `how="min"` | Series — `value` divided by its own group's reference. The fix for pooling across groups at different levels |
-| `group_by_prefix` | `labels`, `{group: (prefix, ...)}`, `other=` | Series of group names, for `group=`. Matches the **longest** prefix, so `ewrms_gk` lands in `range` rather than `ewrms` and the dict's order cannot decide it. Raises on an unmatched label unless `other` is given — a silent bucket hides the entry you forgot |
-| `label_from` | `frame`, `*columns`, `sep=" "` | Series of labels, for `label=`. Skips NaN parts, so a row with no parameter reads `model` not `model nan` |
-| `as_series_dict` | `data`, `value=` | `{label: Series}` — the convention-A normaliser itself |
-| `pick` | `series` (dict), `keep=` | subset **in the order given**, which is what `series=` uses internally |
-
-## Type checking
-
-`pyright` is configured in `pyproject.toml` and the library plus `examples/` check clean. A library other projects import has to be, or every caller inherits the noise. `typeCheckingMode = "basic"` rather than `strict`: strict wants an annotation on every parameter, and `data` is deliberately "Series or DataFrame or dict".
-
-**The one pandas-stub fact worth knowing as a caller.** `frame[label]` and `frame[mask]` are typed `Series | DataFrame`, so passing either straight into a plotter fails pyright even though it runs. Two idioms avoid it:
-
-```python
-# groupby : .reset_index() type-checks, as_index=False does NOT
-ranked = frame.groupby(["a", "b"])["v"].min().reset_index()      # DataFrame
-ranked = frame.groupby(["a", "b"], as_index=False)["v"].min()    # NDFrame | Series
-
-# a boolean mask : wrap it
-subset = pd.DataFrame(frame[frame["a"] == "x"])
-```
-
-Both forms return a DataFrame at runtime; only the first is checkable. Inside the library, `frames._one_column` does this narrowing once and **raises on a duplicated label** — which used to produce a wrong chart silently.
+- **Eight categorical hues**, ordered so neighbours stay apart under colour-vision deficiencies. Measured with CIEDE2000 on protan, deutan and tritan simulations (including the wrap from slot 8 back to slot 1): worst adjacent ΔE is **15.6 light / 17.3 dark** against a floor of 8, and the worst pair for normal vision is **26.3** against a floor of 15. `tests/unit/test_palette.py` enforces it: **re-order or edit a slot and you must re-validate.**
+- **Sequential** is one hue, pale to deep (reversed in dark mode so "more" stays salient). **Diverging** is two poles with a neutral grey midpoint (dark in dark mode). Never a rainbow.
+- **Two identity channels that wrap at the same length are one channel.** Colour and shape both have 8 entries, so `marker(i)` shifts the shape on each colour wrap and varies the fill (solid / open / open with dot) after 64: 192 distinct markers. Use `marker()` for scatters and `line_style()` for lines.
 
 ## Design rules this library enforces
 
-These are the ones worth knowing, because the library will refuse rather than draw something misleading.
+The library refuses rather than draw something misleading.
 
-**One y axis, always.** There is no dual-axis option. Two measures of different scale get two charts (`plot_small_multiples`), or indexing to a common base — a second axis lets you imply any correlation you like by sliding one scale.
-
-**Series caps differ by chart form, and that is deliberate.**
-
-| Form | Cap | Why |
-|---|---|---|
-| `plot_series` | unlimited; at most 20 initially visible | extra series stay selectable in the legend; colours/styles eventually repeat |
-| Other line charts | existing `MAX_SERIES` colour guard | unchanged by the `plot_series` exception |
-| Scatter, facets | 3 (`MAX_ALL_PAIRS`) | read *pair by pair*; no ordering of 8 hues clears the all-pairs floors past 3 |
-| Coloured by rank or value | none | colour encodes magnitude, not identity |
-| ACF panels | none | one series per panel, so colour names nothing |
-
-`MAX_ALL_PAIRS` is a constant rather than `len(palette)`, so growing the palette cannot silently raise the scatter cap.
-
-**Colour comes last, and the order is the safety mechanism.** The eight categorical hues were validated with a colourblind-separation checker in both modes — worst adjacent pair ΔE 9.1 light / 8.4 dark against a floor of 8, worst normal-vision pair 19.6 / 19.3 against a floor of 15. **Re-order the slots and you must re-validate.**
-
-**Two identity channels that wrap at the same length are one channel.** Shape and colour both have 8 entries, so cycling them together makes slot 8 identical to slot 0 in *both*. `marker()` varies the fill on each wrap (solid / open / open-dot) for 8 × 8 × 3 distinct markers. Use `marker()` for scatters, `line_style()` for lines.
-
-**No violin option.** A KDE over ~12 points draws density that is not in the data: it spills past hard floors and invents modes from single observations. `plot_box` with `points=True` is the honest form below a few hundred observations per group.
-
-**Sequential = one hue light→dark. Diverging = two poles + a neutral grey midpoint. Never a rainbow.**
+- **One y axis, always.** There is no dual-axis option. Two measures of different scale get two charts (`plot_small_multiples`), or indexing to a common base.
+- **Series caps differ by form, deliberately.** `plot_series`: unlimited, 20 visible. Other line charts: 8 (`MAX_SERIES`, one per colour). Scatter and facets: 3 (`MAX_ALL_PAIRS`). Coloured by rank or value, and ACF panels: none. `MAX_ALL_PAIRS` is a constant, not `len(palette)`, so growing the palette cannot silently raise the scatter cap.
+- **No violin.** A KDE over ~12 points draws density that is not in the data. `plot_box(points=True)` is the honest form below a few hundred observations per group.
+- **No pie.** `plot_bars(normalize=True)` shows the same shares readably.
+- Refusals: negative parts in `plot_stacked`; non-numeric `x` in `plot_box_series`; duplicated column labels; an unmatched `group_by_prefix` label; non-Cartesian figures in `plot_views`; a Student-t reference when the fitted ν ≤ 2 (no finite variance to scale to).
 
 ## Writing your own plotter
 
@@ -367,39 +218,60 @@ Build the traces, then call `finish()` last:
 
 ```python
 import plotly.graph_objects as go
-from plotters import colour, finish, line_style, as_series_dict
+from plotters import color, finish, line_style, as_series_dict
 
 def plot_mine(data, title=""):
-    frames = as_series_dict(data)
     fig = go.Figure()
-    for i, (name, s) in enumerate(frames.items()):
-        dash, _ = line_style(i)
+    for i, (name, s) in enumerate(as_series_dict(data).items()):
+        dash, width = line_style(i)
         fig.add_trace(go.Scatter(x=s.index, y=s.to_numpy(), name=name,
-                                 line={"color": colour(i), "dash": dash}))
+                                 line={"color": color(i), "dash": dash, "width": width}))
     return finish(fig, title, "subtitle", ylabel="y")
 ```
 
-`finish()` owns the title, legend placement, grid and fonts, so no plotter sets them itself and they cannot drift apart. It puts the **legend under the plot**, because the title is left-aligned and plotly's default corner legend lands on top of it the moment there is a subtitle; the offset is computed in pixels and converted to plotly's fraction-of-plot-area units, so it holds at any figure height.
+`finish()` owns the title, legend placement, grid and fonts, so no plotter sets them itself and they cannot drift apart. It puts the **legend under the plot** (the title is left-aligned and plotly's default corner legend lands on top of it as soon as there is a subtitle), with the offset computed in pixels and converted to plotly's fraction-of-plot-area, so it holds at any figure height. Past 12 legend entries it moves to a scrolling column on the right. Traces with `visible=False` draw no legend entry and are not counted.
 
-Use `apply_log(fig, "x", low, high)` rather than `type="log"` whenever the data crosses 1 — left alone, plotly labels minor log ticks and drops the leading `0.`, so an axis spanning 0.2 to 10 reads `2 3 4 5 6 7 8 9 1 2 3 4`.
+**Log axes.** Use `apply_log(fig, "y", low, high)` rather than `type="log"` whenever the data crosses 1: left alone, plotly labels the minor ticks and drops the leading `0.`, so an axis spanning 0.2 to 10 reads `2 3 4 5 6 7 8 9 1 2 3 4`. On plotly 7.1 `range` is in log10 while `tickvals`, trace data and shapes are in data units; **annotations are in log10**. `apply_log` and `plot_series(markers=, bands=)` handle that.
 
-**On a log axis every axis-space coordinate is in log10** — `tickvals`, `range`, and a shape's `x`. Only `ticktext` and the trace data stay in data units. A `tickval` of 3 is placed at 10^3, and with autorange the axis then stretches three decades to reach it, crushing the real data into a sliver at one edge. `apply_log` converts the ticks and sets an explicit range; `plot_series` does the same for `markers=`. A static `write_image` hides the bug, because kaleido ranges off the trace data.
+## Notebooks
 
-## Notebook gotcha
-
-These return a Figure and draw nothing, so Jupyter renders only the **last expression in a cell**. Two calls in one cell shows one chart. Loop with `display`:
+These functions return a Figure and draw nothing, so Jupyter renders only the **last expression in a cell**. Three ways around it:
 
 ```python
-from IPython.display import display
-for column in frame.columns:
-    display(pl.plot_series(frame[column], column))
+pl.show(fig_a, fig_b)                 # explicit, any number
+pl.show_all(out["figures"])           # a dict or list of figures
+pl.autoshow(True)                     # every plotter displays as soon as it finishes, mid-cell
 ```
+
+`autoshow` hooks `finish()`, so it also works for your own plotters. Assign the result (`fig = pl.plot_series(...)`) or end the line with `;` to avoid Jupyter showing it twice.
 
 ## Saving
 
 ```python
-fig.write_html("chart.html")                          # keeps interactivity
-fig.write_html("chart.html", include_plotlyjs="cdn")  # ~3MB smaller, needs internet
+pl.save_html(fig, "chart.html")                 # keeps interactivity, self-contained
+pl.save_html(fig, "chart.html", cdn=True)       # ~3 MB smaller, needs internet
+pl.save_png(fig, "chart.png")                   # needs kaleido and Chrome (plotly_get_chrome)
 ```
 
-`write_image("x.png")` needs kaleido **and** a Chrome install; on a headless box it usually fails. If you need a PNG and cannot get one, mirror the figure in matplotlib at the same height to eyeball the layout.
+`write_image` needs kaleido **and** a Chrome install; on a headless box it usually fails. For PNGs without Chrome use `plotters.static`.
+
+## Validating the visuals
+
+```bash
+python -m tests.visual            # writes gallery/index.html (open it in a browser)
+python -m tests.visual views      # just the cards whose name contains "views" -> gallery/only.html
+pytest                            # unit tests + builds every gallery card in both themes
+```
+
+The gallery shows every function in **light and dark side by side**, with the exact call, a short checklist of what you should see, a palette page (swatches, colour-blind simulations, ΔE tables, ramps, markers) and the print figures at true size. Add a card by writing a function in `tests/visual/cards_*.py` and decorating it with `@card(section, title, checks=[...])`; the function body is shown on the page, so the example can never drift from what is drawn.
+
+## Type checking
+
+`pyright` is configured in `pyproject.toml` and the library plus `examples/` check clean with `typeCheckingMode = "basic"`: strict would want an annotation on every parameter, and `data` is deliberately "Series or DataFrame or dict". One pandas-stub fact worth knowing as a caller: `frame[label]` and `frame[mask]` are typed `Series | DataFrame`, so passing them straight into a plotter fails pyright even though it runs. Two idioms avoid it:
+
+```python
+ranked = frame.groupby(["a", "b"])["v"].min().reset_index()       # DataFrame (as_index=False is NOT checkable)
+subset = pd.DataFrame(frame[frame["a"] == "x"])                   # wrap a boolean mask
+```
+
+Inside the library `frames._one_column` does this narrowing once and **raises on a duplicated label**, which used to produce a wrong chart silently.

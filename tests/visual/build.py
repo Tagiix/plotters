@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import html
+import io
 import traceback
 from pathlib import Path
 
-import plotly.graph_objects as go
+import matplotlib as mpl
 from plotly.offline import get_plotlyjs
 
 import plotters as pl
@@ -18,6 +20,7 @@ from . import (  # noqa: F401  (registers cards)
     cards_core,
     cards_distributions,
     cards_matrices,
+    cards_static,
 )
 from .palette_page import page_section
 from .registry import CARDS, Card
@@ -49,8 +52,16 @@ h4{margin:14px 0 6px;font-size:13px}@media(max-width:1100px){.pair{grid-template
 
 def _render(card: Card, dark: bool) -> str:
     try:
-        with pl.use_style(dark=dark):
-            fig: go.Figure = card.build()
+        with pl.use_style(dark=dark), mpl.rc_context():
+            fig = card.build()
+            if hasattr(fig, "savefig"):  # a matplotlib print figure: embed it as a PNG
+                buf = io.BytesIO()
+                fig.savefig(buf, format="png", dpi=170)
+                import matplotlib.pyplot as plt
+
+                plt.close(fig)
+                data = base64.b64encode(buf.getvalue()).decode()
+                return f'<img alt="{html.escape(card.title)}" style="max-width:100%" src="data:image/png;base64,{data}">'
             return fig.to_html(
                 full_html=False,
                 include_plotlyjs=False,
