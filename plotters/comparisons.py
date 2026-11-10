@@ -1,8 +1,12 @@
-"""Comparison charts. Convention B: a long frame plus column-name strings, one row per observation.
+"""Comparing models and candidates.
+
+Charts for the question "which one is better, and by how much?": the trade-off between two objectives,
+ranks across contexts and over time, intervals, boxes along a numeric axis, panels and paired
+differences. Convention B (a long frame plus column-name strings) except :func:`plot_paired_difference`
+(convention A) and :func:`plot_bump` (a wide frame).
 
 Every ``x``, ``y``, ``label``, ``group``, ``panel``, ``index``, ``columns`` and ``values`` argument is
-a **string naming a column**, never data. The exception is :func:`plot_paired_difference`, which is
-convention A.
+a **string naming a column**, never data.
 """
 
 from __future__ import annotations
@@ -17,7 +21,9 @@ from plotly.subplots import make_subplots
 
 from . import _color
 from . import style as _style
-from ._types import MAX_ALL_PAIRS, MAX_SERIES, SeriesLike
+from ._checks import _MARKER_SIZE, _cap_groups, _log_bounds, _numeric
+from ._errors import convention_error
+from ._types import MAX_SERIES, SeriesLike
 from .frames import _one_column, _require_columns, as_series_dict, group_by_prefix, pick
 from .layout import HEIGHT, apply_log, finish
 
@@ -27,54 +33,9 @@ __all__ = [
     "plot_box_series",
     "plot_small_multiples",
     "plot_paired_difference",
-    "plot_scatter",
-    "plot_shaded_scatter",
     "plot_interval",
-    "plot_density2d",
+    "plot_bump",
 ]
-
-_MARKER_SIZE = 9
-
-
-def _numeric(frame: pd.DataFrame, column: str, caller: str) -> np.ndarray:
-    try:
-        return _one_column(frame, column).to_numpy(dtype=float)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{caller}: column {column!r} must be numeric") from exc
-
-
-def _cap_groups(values: Sequence[object], caller: str, column: str) -> None:
-    if len(values) > MAX_ALL_PAIRS:
-        raise ValueError(
-            f"{caller}: group={column!r} has {len(values)} values; scatter and facets are read pair "
-            f"by pair and are capped at {MAX_ALL_PAIRS} (no ordering of 8 hues clears the all-pairs "
-            "floors past 3). Use label= to annotate points, groups={family: prefixes} to collapse "
-            "values into families, or plot_small_multiples."
-        )
-
-
-def _log_bounds(values: np.ndarray, caller: str, axis: str) -> tuple[float, float]:
-    finite = values[np.isfinite(values)]
-    if finite.size == 0 or (finite <= 0).any():
-        raise ValueError(f"{caller}: log{axis} needs strictly positive values")
-    return float(finite.min()) / 1.25, float(finite.max()) * 1.25
-
-
-def _bubble_sizes(
-    values: np.ndarray, caller: str, column: str, largest: float = 30.0
-) -> np.ndarray:
-    """Marker diameters in px so that the *area* is proportional to the value.
-
-    Area, not diameter, is what the eye reads: doubling a value should double the area. The
-    smallest visible marker is 4 px, so a tiny value does not vanish.
-    """
-    finite = values[np.isfinite(values)]
-    if finite.size and (finite < 0).any():
-        raise ValueError(f"{caller}: size={column!r} has negative values; area cannot be negative")
-    top = float(finite.max()) if finite.size else 0.0
-    if top <= 0:
-        return np.full(values.shape, 4.0)
-    return np.maximum(4.0, largest * np.sqrt(np.nan_to_num(values) / top))
 
 
 def _bool_pair(flag: bool | tuple[bool, bool], caller: str) -> tuple[bool, bool]:
@@ -103,194 +64,6 @@ def _pareto_mask(x: np.ndarray, y: np.ndarray, lower_x: bool, lower_y: bool) -> 
 
 def _sub(subtitle: str, default: str) -> str:
     return subtitle or default
-
-
-def plot_scatter(
-    frame: pd.DataFrame,
-    x: str,
-    y: str,
-    title: str = "",
-    subtitle: str = "",
-    *,
-    group: str | None = None,
-    label: str | None = None,
-    size: str | None = None,
-    diagonal: bool = False,
-    logx: bool = False,
-    logy: bool = False,
-    xlabel: str | None = None,
-    ylabel: str | None = None,
-    height: int = HEIGHT,
-) -> go.Figure:
-    """Two columns against each other, optionally split by group, annotated by label, or sized.
-
-    ``group=`` and ``label=`` are different things and easy to swap::
-
-        plot_scatter(long, x="cost", y="error", group="model")  # one coloured series per model
-        plot_scatter(long, x="cost", y="error", label="model")  # one series, text next to points
-
-    Args:
-        frame: Long DataFrame, one row per observation.
-        x: Column for the x axis.
-        y: Column for the y axis.
-        title: Figure title.
-        subtitle: Muted line under the title.
-        group: Column whose values each become one coloured series (at most 3 values).
-        label: Column written next to each point.
-        size: Non-negative numeric column that sets each marker's **area** (a bubble chart). The
-            default subtitle says so.
-        diagonal: Draw ``y = x``.
-        logx: Logarithmic x axis (needs positive values).
-        logy: Logarithmic y axis.
-        xlabel: X axis title; defaults to the column name.
-        ylabel: Y axis title; defaults to the column name.
-        height: Figure height in px.
-
-    Raises:
-        ConventionError: ``frame`` is not a DataFrame (a Series or dict was passed).
-        KeyError: a named column is missing.
-        ValueError: more than 3 groups, a non-numeric axis column, or a log axis with
-            non-positive values.
-    """
-    _require_columns(frame, "plot_scatter", x=x, y=y, group=group, label=label, size=size)
-    xs, ys = _numeric(frame, x, "plot_scatter"), _numeric(frame, y, "plot_scatter")
-    sizes = (
-        _bubble_sizes(_numeric(frame, size, "plot_scatter"), "plot_scatter", size) if size else None
-    )
-    st = _style.get_style()
-    fig = go.Figure()
-    parts: list[tuple[str, pd.Index]] = [("", frame.index)]
-    if group is not None:
-        values = list(pd.unique(_one_column(frame, group)))
-        _cap_groups(values, "plot_scatter", group)
-        parts = [(str(v), frame.index[_one_column(frame, group).to_numpy() == v]) for v in values]
-    for i, (name, idx) in enumerate(parts):
-        mask = frame.index.isin(idx)
-        text = _one_column(frame, label).astype(str).to_numpy()[mask] if label else None
-        marker = {
-            **_style.marker(i, size=_MARKER_SIZE),
-            "color": _style.color(i) if group else st.accent,
-        }
-        if sizes is not None:
-            marker.update(
-                size=sizes[mask],
-                sizemode="diameter",
-                opacity=0.7,
-                line={"width": 1, "color": st.surface},
-            )
-        fig.add_scatter(
-            x=xs[mask], y=ys[mask], mode="markers+text" if label else "markers", name=name,
-            marker=marker, text=text, textposition="top right", textfont={"size": 10, "color": st.muted},
-            showlegend=group is not None,
-        )  # fmt: skip
-    if diagonal:
-        lo, hi = float(min(np.nanmin(xs), np.nanmin(ys))), float(max(np.nanmax(xs), np.nanmax(ys)))
-        fig.add_scatter(x=[lo, hi], y=[lo, hi], mode="lines", name="y = x", showlegend=False,
-                        line={"color": st.muted, "width": 1, "dash": "dot"}, hoverinfo="skip")  # fmt: skip
-    if logx:
-        apply_log(fig, "x", *_log_bounds(xs, "plot_scatter", "x"))
-    if logy:
-        apply_log(fig, "y", *_log_bounds(ys, "plot_scatter", "y"))
-    note = f"marker area is proportional to {size}" if size else ""
-    return finish(fig, title, subtitle or note, xlabel=xlabel or x, ylabel=ylabel or y, height=height,
-                  legend=group is not None)  # fmt: skip
-
-
-def plot_shaded_scatter(
-    frame: pd.DataFrame,
-    x: str,
-    y: str,
-    shade: str,
-    title: str = "",
-    subtitle: str = "",
-    *,
-    label: str | None = None,
-    size: str | None = None,
-    log_shade: bool = False,
-    reference: float | None = None,
-    logx: bool = False,
-    logy: bool = False,
-    xlabel: str | None = None,
-    ylabel: str | None = None,
-    height: int = HEIGHT,
-) -> go.Figure:
-    """Two columns plus a **continuous** third as colour, with a colourbar.
-
-    Use this instead of ``plot_scatter(group=)`` when the third variable is a quantity rather
-    than a category: ``group=`` caps at three hues and throws the gradient away.
-
-    Args:
-        frame: Long DataFrame.
-        x: Column for the x axis.
-        y: Column for the y axis.
-        shade: Numeric column that sets the colour.
-        title: Figure title.
-        subtitle: Muted line under the title.
-        label: Column written next to each point.
-        size: Non-negative numeric column that sets each marker's area, so one chart carries four
-            variables (x, y, colour and size).
-        log_shade: Colour by ``log10(shade)`` for a geometric ratio (needs positive values);
-            the colourbar is still labelled in data units.
-        reference: A shade value that is "neutral" (such as 1.0 for a ratio). Switches to the
-            diverging ramp centred on it, symmetric in log space when ``log_shade``.
-        logx: Logarithmic x axis.
-        logy: Logarithmic y axis.
-        xlabel: X axis title; defaults to the column name.
-        ylabel: Y axis title; defaults to the column name.
-        height: Figure height in px.
-
-    Raises:
-        ValueError: ``shade`` is not numeric, or ``log_shade`` / ``reference`` with non-positive
-            values.
-    """
-    caller = "plot_shaded_scatter"
-    _require_columns(frame, caller, x=x, y=y, shade=shade, label=label, size=size)
-    xs, ys, sh = (
-        _numeric(frame, x, caller),
-        _numeric(frame, y, caller),
-        _numeric(frame, shade, caller),
-    )
-    st = _style.get_style()
-    values = sh
-    if log_shade:
-        if (sh[np.isfinite(sh)] <= 0).any():
-            raise ValueError(f"{caller}: log_shade needs strictly positive shade values")
-        values = np.log10(sh)
-    cmin, cmax = float(np.nanmin(values)), float(np.nanmax(values))
-    marker: dict[str, object] = {
-        "size": _bubble_sizes(_numeric(frame, size, caller), caller, size)
-        if size
-        else _MARKER_SIZE + 1,
-        "color": values,
-        "line": {"width": 0.6, "color": st.surface},
-    }
-    if reference is not None:
-        center = math.log10(reference) if log_shade else reference
-        span = max(abs(cmin - center), abs(cmax - center)) or 1.0
-        marker.update(colorscale=_style.diverging_scale(), cmin=center - span, cmax=center + span)
-    else:
-        marker.update(
-            colorscale=_style.sequential_scale(), cmin=cmin, cmax=cmax if cmax > cmin else cmin + 1
-        )
-    ticks = np.linspace(marker["cmin"], marker["cmax"], 5)  # type: ignore[arg-type]
-    marker["colorbar"] = {
-        "title": {"text": shade, "font": {"size": 11, "color": st.ink_2}}, "thickness": 12, "outlinewidth": 0,
-        "tickfont": {"size": 10, "color": st.muted}, "tickmode": "array", "tickvals": ticks.tolist(),
-        "ticktext": [f"{10**t:.3g}" if log_shade else f"{t:.3g}" for t in ticks],
-    }  # fmt: skip
-    text = _one_column(frame, label).astype(str).to_numpy() if label else None
-    fig = go.Figure(go.Scatter(
-        x=xs, y=ys, mode="markers+text" if label else "markers", marker=marker, text=text,
-        textposition="top right", textfont={"size": 10, "color": st.muted}, customdata=sh,
-        hovertemplate=f"{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<br>{shade}=%{{customdata:.4g}}<extra></extra>",
-    ))  # fmt: skip
-    if logx:
-        apply_log(fig, "x", *_log_bounds(xs, caller, "x"))
-    if logy:
-        apply_log(fig, "y", *_log_bounds(ys, caller, "y"))
-    return finish(
-        fig, title, subtitle, xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=False
-    )
 
 
 def plot_tradeoff(
@@ -581,6 +354,7 @@ def plot_small_multiples(
     ncols: int = 3,
     shared_y: bool = True,
     panel_height: int = 240,
+    height: int | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
 ) -> go.Figure:
@@ -600,6 +374,7 @@ def plot_small_multiples(
         ncols: Panels per row.
         shared_y: Share the y range across panels so they are comparable.
         panel_height: Height of one panel row in px.
+        height: Total figure height in px; overrides the height computed from ``panel_height``.
         xlabel: X axis title; defaults to the column name.
         ylabel: Y axis title; defaults to the column name.
 
@@ -629,7 +404,11 @@ def plot_small_multiples(
     fig.update_xaxes(title_text=xlabel or x, row=rows)
     fig.update_yaxes(title_text=ylabel or y, col=1)
     return finish(
-        fig, title, subtitle, height=max(HEIGHT, 140 + panel_height * rows), legend=bool(group)
+        fig,
+        title,
+        subtitle,
+        height=height or max(HEIGHT, 140 + panel_height * rows),
+        legend=bool(group),
     )
 
 
@@ -784,88 +563,84 @@ def plot_interval(
                   height=height or int(min(900, max(260, 150 + 30 * len(frame)))), legend=bool(group))  # fmt: skip
 
 
-def plot_density2d(
+def plot_bump(
     frame: pd.DataFrame,
-    x: str,
-    y: str,
     title: str = "",
     subtitle: str = "",
     *,
-    bins: int = 60,
-    log_counts: bool = True,
-    logx: bool = False,
-    logy: bool = False,
-    xlabel: str | None = None,
-    ylabel: str | None = None,
-    height: int = HEIGHT,
+    lower_is_better: bool = True,
+    already_ranks: bool = False,
+    highlight: Sequence[str] | None = None,
+    xlabel: str = "",
+    height: int | None = None,
 ) -> go.Figure:
-    """Two columns as a binned density: the scatter that stays readable with many points.
+    """How the ranking of several items changes over time (a bump chart).
 
-    Past a few thousand points a scatter overplots into a solid blob and hides where the mass is.
-    Here the plane is cut into cells and each is shaded by how many points it holds; empty cells
-    stay blank.
+    Each step is ranked on its own (1 at the top), so you see who overtakes whom, which a plot of the
+    raw scores hides when their scale drifts. Names are written at the right end.
 
     Args:
-        frame: Long DataFrame.
-        x: Column for the x axis.
-        y: Column for the y axis.
+        frame: Index = the steps (dates, folds, contexts), columns = items, cells = a score. This is
+            convention D (wide); for a long frame use ``long_to_wide`` first.
         title: Figure title.
-        subtitle: Muted line under the title; a default reports the number of points.
-        bins: Cells per axis.
-        log_counts: Shade by ``log10(count)`` so sparse tails stay visible next to a dense core;
-            the colourbar is still labelled in counts.
-        logx: Logarithmic x axis; cells are equal-width in log space (needs positive values).
-        logy: Logarithmic y axis.
-        xlabel: X axis title; defaults to the column name.
-        ylabel: Y axis title; defaults to the column name.
-        height: Figure height in px.
+        subtitle: Muted line under the title; a default says what rank 1 means.
+        lower_is_better: Whether the lowest score gets rank 1.
+        already_ranks: The cells are already ranks (skip ranking).
+        highlight: Items to draw in colour; the others are drawn thin and grey so one story stands
+            out among many items.
+        xlabel: X axis title.
+        height: Figure height; grows with the number of items.
 
     Raises:
-        ValueError: no finite pairs, or a log axis with non-positive values.
+        ConventionError: ``frame`` is not a DataFrame.
+        ValueError: highlighting an item that is not a column.
     """
-    caller = "plot_density2d"
-    _require_columns(frame, caller, x=x, y=y)
-    xs, ys = _numeric(frame, x, caller), _numeric(frame, y, caller)
-    ok = np.isfinite(xs) & np.isfinite(ys)
-    xs, ys = xs[ok], ys[ok]
-    if xs.size == 0:
-        raise ValueError(f"{caller}: no finite (x, y) pairs")
-    if logx:
-        lo, hi = _log_bounds(xs, caller, "x")
-    if logy:
-        lo_y, hi_y = _log_bounds(ys, caller, "y")
-    xe = (
-        np.geomspace(xs.min(), xs.max(), bins + 1)
-        if logx
-        else np.linspace(xs.min(), xs.max(), bins + 1)
+    if not isinstance(frame, pd.DataFrame):
+        raise convention_error("plot_bump", "D", frame)
+    items = [str(c) for c in frame.columns]
+    values = frame.copy()
+    values.columns = items
+    ranks = (
+        values if already_ranks else values.rank(axis=1, method="min", ascending=lower_is_better)
     )
-    ye = (
-        np.geomspace(ys.min(), ys.max(), bins + 1)
-        if logy
-        else np.linspace(ys.min(), ys.max(), bins + 1)
-    )
-    counts, _, _ = np.histogram2d(xs, ys, bins=[xe, ye])
-    z = counts.T.copy()
-    z[z == 0] = np.nan
-    xc = np.sqrt(xe[:-1] * xe[1:]) if logx else (xe[:-1] + xe[1:]) / 2
-    yc = np.sqrt(ye[:-1] * ye[1:]) if logy else (ye[:-1] + ye[1:]) / 2
+    if highlight is not None:
+        unknown = [h for h in highlight if str(h) not in items]
+        if unknown:
+            raise ValueError(f"highlight names {unknown} that are not in {items}")
     st = _style.get_style()
-    shown = np.log10(z) if log_counts else z
-    top = float(np.nanmax(shown))
-    ticks = np.linspace(float(np.nanmin(shown)), top, 5)
-    colorbar = {"title": {"text": "count", "font": {"size": 11, "color": st.ink_2}}, "thickness": 12,
-                "outlinewidth": 0, "tickfont": {"size": 10, "color": st.muted}}  # fmt: skip
-    if log_counts:
-        colorbar.update(
-            tickmode="array", tickvals=ticks.tolist(), ticktext=[f"{10**t:.0f}" for t in ticks]
-        )
-    fig = go.Figure(go.Heatmap(
-        x=xc, y=yc, z=shown, colorscale=_style.sequential_scale(), colorbar=colorbar, customdata=z,
-        hovertemplate=f"{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<br>count=%{{customdata:.0f}}<extra></extra>",
-    ))  # fmt: skip
-    if logx:
-        apply_log(fig, "x", lo, hi)
-    if logy:
-        apply_log(fig, "y", lo_y, hi_y)
-    return finish(fig, title, subtitle or f"n = {xs.size:,} points in {bins} x {bins} cells",
-                  xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=False)  # fmt: skip
+    fig = go.Figure()
+    marked = {str(h) for h in highlight} if highlight is not None else set(items)
+    for i, name in enumerate(items):
+        r = ranks[name].to_numpy(dtype=float)
+        on = name in marked
+        color = _style.color(i) if on else st.axis
+        fig.add_scatter(x=ranks.index, y=r, mode="lines+markers", name=name, showlegend=False,
+                        line={"color": color, "width": 2.6 if on else 1.2},
+                        marker={"size": 8 if on else 4, "color": color},
+                        opacity=1.0 if on else 0.8, hovertemplate=f"{name}: rank %{{y:.0f}}<extra></extra>")  # fmt: skip
+    n = len(items)
+    fig.update_yaxes(autorange="reversed", tickmode="array", tickvals=list(range(1, n + 1)), range=[n + 0.5, 0.5],
+                     showgrid=False, zeroline=False)  # fmt: skip
+    fig = finish(
+        fig,
+        title,
+        subtitle or f"rank 1 = {'lowest' if lower_is_better else 'highest'} score",
+        xlabel=xlabel,
+        ylabel="rank",
+        height=height or int(min(900, max(320, 150 + 24 * n))),
+        legend=False,
+    )
+    last = ranks.iloc[-1].to_numpy(dtype=float)
+    seen: dict[float, int] = {}
+    for i, name in enumerate(items):
+        if np.isnan(last[i]):
+            continue
+        offset = 0.28 * seen.get(
+            last[i], 0
+        )  # tied items would write their names on top of each other
+        seen[last[i]] = seen.get(last[i], 0) + 1
+        on = name in marked
+        fig.add_annotation(xref="paper", x=1.0, xanchor="left", xshift=8, yref="y", y=last[i] + offset, showarrow=False,
+                           text=name, font={"size": 10, "color": _style.color(i) if on else st.muted})  # fmt: skip
+    fig.update_layout(margin={"r": 120})
+    return fig

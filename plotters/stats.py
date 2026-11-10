@@ -28,6 +28,8 @@ __all__ = [
     "bartlett_band",
     "pacf_values",
     "ljung_box",
+    "ccf_values",
+    "periodogram",
     "one_standard_error_choice",
     "roc_curve",
     "roc_auc",
@@ -471,3 +473,93 @@ def average_precision(
     """
     precision, recall, _ = precision_recall_curve(y_true, score)
     return float(np.sum(np.diff(np.r_[0.0, recall]) * precision))
+
+
+def ccf_values(
+    x: pd.Series | np.ndarray | Sequence[float],
+    y: pd.Series | np.ndarray | Sequence[float],
+    lags: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Cross-correlation between two series at lags ``-lags`` to ``lags``.
+
+    The value at lag ``k`` is the correlation of ``x[t]`` with ``y[t - k]``, so a **positive** lag
+    means ``x`` responds to what ``y`` did ``k`` steps earlier (``y`` leads), a negative lag the
+    reverse. The denominator is ``N`` (the same convention as :func:`acf_values`). Series with an
+    index are first aligned on it; observations missing in either are dropped.
+
+    Args:
+        x: First series.
+        y: Second series.
+        lags: Highest lag in each direction.
+
+    Returns:
+        ``(lag, coefficient)`` arrays of length ``2 * lags + 1``.
+
+    Raises:
+        ValueError: ``lags`` below 1 or not smaller than the number of paired observations, or a
+            constant series.
+    """
+    if isinstance(x, pd.Series) and isinstance(y, pd.Series):
+        pair = pd.concat([x, y], axis=1, join="inner").astype(float)
+        pair = pair[np.isfinite(pair).all(axis=1)]
+        a, b = pair.iloc[:, 0].to_numpy(), pair.iloc[:, 1].to_numpy()
+    else:
+        a, b = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        if a.shape != b.shape:
+            raise ValueError("x and y need the same length")
+        ok = np.isfinite(a) & np.isfinite(b)
+        a, b = a[ok], b[ok]
+    n = a.size
+    if lags < 1 or lags >= n:
+        raise ValueError(f"lags must be between 1 and {n - 1}")
+    da, db = a - a.mean(), b - b.mean()
+    scale = float(np.sqrt((da**2).sum() * (db**2).sum()))
+    if scale == 0:
+        raise ValueError("a constant series has no cross-correlation")
+    out = []
+    for k in range(-lags, lags + 1):
+        out.append(
+            float((da[k:] * db[: n - k]).sum() / scale)
+            if k >= 0
+            else float((da[: n + k] * db[-k:]).sum() / scale)
+        )
+    return np.arange(-lags, lags + 1), np.array(out)
+
+
+def periodogram(
+    series: pd.Series | np.ndarray | Sequence[float],
+    *,
+    detrend: bool = True,
+    spacing: float = 1.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Raw periodogram: how much of the variance sits at each frequency.
+
+    ``power[j] = |FFT(x)[j]|**2 / N`` at frequency ``j / (N * spacing)`` cycles per unit of time,
+    excluding frequency zero. The mean is always removed; a straight-line trend is too when
+    ``detrend`` is on, because a trend would otherwise leak into the lowest frequencies and swamp
+    everything else.
+
+    Args:
+        series: Observations at equal spacing; missing and infinite values are dropped.
+        detrend: Also remove a least-squares line.
+        spacing: Time between observations (1 for "per observation"; 1/12 for monthly data
+            measured in years, giving frequencies in cycles per year).
+
+    Returns:
+        ``(frequency, power)`` for the positive frequencies.
+
+    Raises:
+        ValueError: fewer than 8 observations.
+    """
+    x = np.asarray(series, dtype=float)
+    x = x[np.isfinite(x)]
+    if x.size < 8:
+        raise ValueError("a periodogram needs at least 8 observations")
+    t = np.arange(x.size, dtype=float)
+    if detrend:
+        x = x - np.polyval(np.polyfit(t, x, 1), t)
+    else:
+        x = x - x.mean()
+    power = np.abs(np.fft.rfft(x)) ** 2 / x.size
+    freq = np.fft.rfftfreq(x.size, d=spacing)
+    return freq[1:], power[1:]

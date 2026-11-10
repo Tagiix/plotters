@@ -12,4 +12,6 @@ First release.
 - Forecast evaluation: `plot_forecast`, `plot_residuals`, `plot_calibration`, `plot_quantile_calibration`, `plot_pit`, `plot_pacf` (and `plot_acf_grid(partial=True)`), `ljung_box`, `pacf_values`.
 - Statistical learning: `plot_decision_boundary`, `plot_coefficient_path`, `plot_error_curves` (with the one-standard-error rule), `plot_roc`, `partial_dependence` / `plot_partial_dependence`, `plot_scree`, `plot_confusion`, `plot_dendrogram`; `plot_density2d` for large scatters.
 - Small tasks: shaded `spans=` and `step=` on `plot_series`; `size=` (bubble) on `plot_scatter` and `plot_shaded_scatter`; `error=` on `plot_bars` and `plot_grouped_bars`; `plot_pareto`; `plot_grid` to combine finished figures.
+- Diagnostics: `plot_gaps`, `plot_seasonal`, `plot_lag`, `plot_ccf`, `plot_periodogram`; `plot_bump`, `plot_table`, `plot_series(range_buttons=)`, `group_summary`.
+- Reorganised for readability: new `relationships` module (scatter family), `comparisons` reduced to model comparison, shared checks in `_checks`; README restructured around a task-to-function table; gallery sections mirror the README.
 - Visual gallery (`python -m tests.visual`) and a unit test suite.

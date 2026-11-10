@@ -18,6 +18,7 @@ from . import (  # noqa: F401  (registers cards)
     cards_categorical,
     cards_comparisons,
     cards_core,
+    cards_diagnostics,
     cards_distributions,
     cards_forecasting,
     cards_learning,
@@ -30,6 +31,24 @@ from .registry import CARDS, Card
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "gallery"
+
+# Gallery sections in reading order; they mirror the README's chart sections.
+ORDER = [
+    "Layout",
+    "Time series",
+    "Analysis",
+    "Diagnostics",
+    "Correlogram",
+    "Forecasting",
+    "Distributions",
+    "Relationships",
+    "Comparisons",
+    "Categorical",
+    "Matrices & tables",
+    "Learning",
+    "Views",
+    "Print",
+]
 
 CSS = """
 :root{--bg:#fbfbfa;--ink:#14171c;--muted:#6b7280;--line:#e2e4e8;--code:#f1f2f4;--accent:#2b5cda}
@@ -85,7 +104,9 @@ def build(out: Path = OUT, only: str | None = None) -> Path:
     (out / "plotly.min.js").write_text(get_plotlyjs(), encoding="utf-8")
 
     sections: dict[str, list[Card]] = {}
-    for card in CARDS:
+    for card in sorted(
+        CARDS, key=lambda c: ORDER.index(c.section) if c.section in ORDER else len(ORDER)
+    ):
         if only and only not in card.slug:
             continue
         sections.setdefault(card.section, []).append(card)

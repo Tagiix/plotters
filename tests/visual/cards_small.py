@@ -10,7 +10,7 @@ from .registry import card
 
 
 @card(
-    "Small tasks",
+    "Time series",
     "plot_series: shaded spans",
     [
         "Two shaded bands behind the lines with their labels at the top; the lines stay readable on top.",
@@ -27,7 +27,7 @@ def sm_spans():
 
 
 @card(
-    "Small tasks",
+    "Time series",
     "plot_series: step",
     [
         "A step function: each value holds until the next observation, with right-angled corners.",
@@ -43,7 +43,7 @@ def sm_step():
 
 
 @card(
-    "Small tasks",
+    "Relationships",
     "plot_scatter: bubbles",
     [
         "Marker area (not diameter) is proportional to the third column; the subtitle says so.",
@@ -67,7 +67,7 @@ def sm_bubbles():
 
 
 @card(
-    "Small tasks",
+    "Relationships",
     "plot_shaded_scatter: four variables",
     [
         "x, y, colour (diverging about 1, log ratio) and size on one chart.",
@@ -89,7 +89,7 @@ def sm_shaded_bubbles():
 
 
 @card(
-    "Small tasks",
+    "Categorical",
     "plot_bars: error bars",
     [
         "Means with asymmetric confidence intervals as whiskers; the values are written inside the bars so they never collide.",
@@ -105,7 +105,7 @@ def sm_bar_errors():
 
 
 @card(
-    "Small tasks",
+    "Categorical",
     "plot_grouped_bars: error bars",
     [
         "Grouped bars each with their own whisker, in matching positions.",
@@ -119,7 +119,7 @@ def sm_grouped_errors():
 
 
 @card(
-    "Small tasks",
+    "Categorical",
     "plot_pareto",
     [
         "Causes ranked by share with the running total; the dotted 80% line shows how few causes make up most of it.",
@@ -141,7 +141,7 @@ def sm_pareto():
 
 
 @card(
-    "Small tasks",
+    "Views",
     "plot_grid",
     [
         "Three finished figures of different kinds placed in one grid, each keeping its own axes, titles and reference lines.",

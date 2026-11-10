@@ -11,6 +11,7 @@ from . import (  # noqa: F401  (registers the cards)
     cards_categorical,
     cards_comparisons,
     cards_core,
+    cards_diagnostics,
     cards_distributions,
     cards_forecasting,
     cards_learning,

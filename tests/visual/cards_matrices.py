@@ -23,7 +23,7 @@ def _data(n=300) -> pd.DataFrame:
 
 
 @card(
-    "Matrices",
+    "Matrices & tables",
     "plot_correlation",
     [
         "Diverging: one hue per pole with a neutral midpoint (grey, dark in dark mode); diagonal blank.",
@@ -35,7 +35,7 @@ def mat_corr():
 
 
 @card(
-    "Matrices",
+    "Matrices & tables",
     "plot_correlation: spearman, fixed range",
     [
         "Same data with rank correlation on a fixed -1..1 scale, comparable between charts.",
@@ -48,7 +48,7 @@ def mat_corr_spearman():
 
 
 @card(
-    "Matrices",
+    "Matrices & tables",
     "plot_matrix: non-straddling",
     [
         "All values positive: single-hue sequential ramp, pale to deep, with cell values written in.",
@@ -65,7 +65,7 @@ def mat_seq():
 
 
 @card(
-    "Matrices",
+    "Matrices & tables",
     "plot_matrix: symmetric about zero",
     [
         "Values straddle zero: diverging ramp with the range forced symmetric, so grey really is zero.",
@@ -82,7 +82,7 @@ def mat_div():
 
 
 @card(
-    "Matrices",
+    "Matrices & tables",
     "plot_table_heatmap",
     [
         "Columns on different scales: n, mean, std, skewness each shaded within its own column.",
@@ -95,7 +95,7 @@ def mat_table():
 
 
 @card(
-    "Matrices",
+    "Matrices & tables",
     "plot_contours",
     [
         "Labelled level curves with exact values; dashed y = x where the two arguments agree (f vanishes there).",
@@ -117,7 +117,7 @@ def mat_contours():
 
 
 @card(
-    "Matrices",
+    "Matrices & tables",
     "plot_contours: log axes",
     [
         "Both axes logarithmic with readable ticks; contours stay aligned with the grid.",

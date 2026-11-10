@@ -62,7 +62,7 @@ def cmp_tradeoff_mixed():
 
 
 @card(
-    "Comparisons",
+    "Relationships",
     "plot_scatter",
     [
         "Two groups in two hues and shapes; dotted y = x diagonal.",
@@ -76,7 +76,7 @@ def cmp_scatter():
 
 
 @card(
-    "Comparisons",
+    "Relationships",
     "plot_shaded_scatter",
     [
         "Continuous third variable as colour with a colourbar labelled in data units (log-scaled ratio, diverging about 1).",

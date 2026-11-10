@@ -199,7 +199,7 @@ def fc_pit():
 
 
 @card(
-    "Comparisons",
+    "Relationships",
     "plot_density2d",
     [
         "60,000 points that a scatter would overplot into a blob; here the dense core and the sparse tails are both visible.",

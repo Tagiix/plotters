@@ -190,6 +190,7 @@ def plot_acf_grid(
     alpha: float = 0.05,
     series: Sequence[str] | None = None,
     panel_height: int = 260,
+    height: int | None = None,
 ) -> go.Figure:
     """One correlogram panel per series, **each with its own band**. No series cap.
 
@@ -208,6 +209,7 @@ def plot_acf_grid(
         alpha: Two-sided level of the bands.
         series: Subset and order of series.
         panel_height: Height of one panel row in px.
+        height: Total figure height in px; overrides the height computed from ``panel_height``.
     """
     frames = pick(as_series_dict(data, _caller="plot_acf_grid"), series)
     names = [str(n) for n in frames]
@@ -224,4 +226,6 @@ def plot_acf_grid(
     fig.update_xaxes(title_text="lag", row=rows)
     kind = "|x|" if absolute else "x"
     fig.update_yaxes(title_text=f"{'pacf' if partial else 'acf'}({kind})", col=1)
-    return finish(fig, title, subtitle, height=max(HEIGHT, 120 + panel_height * rows), legend=False)
+    return finish(
+        fig, title, subtitle, height=height or max(HEIGHT, 120 + panel_height * rows), legend=False
+    )

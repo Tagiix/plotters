@@ -7,6 +7,7 @@ These colour by **value** (a rank would discard magnitude: a correlation of 0.97
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from typing import Literal
 
 import numpy as np
@@ -18,7 +19,7 @@ from . import style as _style
 from ._errors import convention_error
 from .layout import HEIGHT, apply_log, finish
 
-__all__ = ["plot_matrix", "plot_correlation", "plot_table_heatmap", "plot_contours"]
+__all__ = ["plot_matrix", "plot_correlation", "plot_table_heatmap", "plot_contours", "plot_table"]
 
 _MAX_ANNOTATED_CELLS = 900
 _DARK_INK = "#0e1116"
@@ -374,3 +375,66 @@ def plot_contours(
                 )
             apply_log(fig, axis, float(arr.min()), float(arr.max()))  # type: ignore[arg-type]
     return finish(fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=False)
+
+
+def plot_table(
+    frame: pd.DataFrame,
+    title: str = "",
+    subtitle: str = "",
+    *,
+    fmt: str = ".4g",
+    column_formats: Mapping[str, str] | None = None,
+    index: bool = True,
+    height: int | None = None,
+) -> go.Figure:
+    """A DataFrame as a clean table in the library's style, with no shading.
+
+    Numbers are right-aligned and formatted, text left-aligned, missing values shown as a dash, and
+    the rows alternate in tone. Use :func:`plot_table_heatmap` when you want the cells shaded.
+
+    Args:
+        frame: Any DataFrame.
+        title: Figure title.
+        subtitle: Muted line under the title.
+        fmt: Python format spec for numeric cells.
+        column_formats: ``{column: format spec}`` overriding ``fmt`` for a column (``".1%"`` for a
+            share, ``",.0f"`` for a count).
+        index: Show the index as the first column.
+        height: Figure height; grows with the number of rows.
+
+    Raises:
+        ConventionError: ``frame`` is not a DataFrame.
+        KeyError: ``column_formats`` names a column that is not there.
+    """
+    if not isinstance(frame, pd.DataFrame):
+        raise convention_error("plot_table", "D", frame)
+    overrides = dict(column_formats or {})
+    unknown = [c for c in overrides if c not in frame.columns]
+    if unknown:
+        raise KeyError(f"column_formats names {unknown}, not in {list(frame.columns)}")
+    st = _style.get_style()
+    shown = frame.reset_index() if index else frame
+    cells, aligns = [], []
+    for col in shown.columns:
+        numeric = pd.api.types.is_numeric_dtype(shown[col])
+        spec = overrides.get(str(col), fmt)
+        cells.append([
+            "\u2014" if (isinstance(v, float) and math.isnan(v)) or v is None else (format(v, spec) if numeric else str(v))
+            for v in shown[col]
+        ])  # fmt: skip
+        aligns.append("right" if numeric else "left")
+    band = _color.with_alpha(st.grid, 0.55)
+    row_fill = [st.surface if r % 2 == 0 else band for r in range(len(shown))]
+    fig = go.Figure(go.Table(
+        header={"values": [str(c) for c in shown.columns], "align": aligns, "fill_color": st.grid,
+                "font": {"color": st.ink, "size": 12}, "line": {"color": st.axis, "width": 1}, "height": 30},
+        cells={"values": cells, "align": aligns, "fill_color": [row_fill] * len(shown.columns),
+               "font": {"color": st.ink_2, "size": 12}, "line": {"color": st.axis, "width": 0.5}, "height": 26},
+    ))  # fmt: skip
+    return finish(
+        fig,
+        title,
+        subtitle,
+        height=height or int(min(900, max(200, 150 + 27 * (len(shown) + 1)))),
+        legend=False,
+    )

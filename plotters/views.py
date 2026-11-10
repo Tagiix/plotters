@@ -256,6 +256,7 @@ def plot_grid(
     *,
     ncols: int = 2,
     panel_height: int = 320,
+    height: int | None = None,
     shared_x: bool = False,
     shared_y: bool = False,
     legend: bool | None = None,
@@ -276,6 +277,7 @@ def plot_grid(
         subtitle: Muted line under the title.
         ncols: Panels per row.
         panel_height: Height of one panel row in px.
+        height: Total figure height in px; overrides the height computed from ``panel_height``.
         shared_x: Share the x axis across panels.
         shared_y: Share the y axis across panels.
         legend: ``None`` shows the legend when any named trace asks for one.
@@ -347,4 +349,6 @@ def plot_grid(
             for t in _traces(grid)
         )
     )
-    return finish(grid, title, subtitle, height=max(HEIGHT, 140 + panel_height * rows), legend=show)
+    return finish(
+        grid, title, subtitle, height=height or max(HEIGHT, 140 + panel_height * rows), legend=show
+    )

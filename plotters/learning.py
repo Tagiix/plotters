@@ -433,6 +433,7 @@ def plot_partial_dependence(
     ncols: int = 3,
     shared_y: bool = True,
     panel_height: int = 230,
+    height: int | None = None,
 ) -> go.Figure:
     """One panel per feature showing how the prediction responds to it.
 
@@ -445,6 +446,7 @@ def plot_partial_dependence(
         ncols: Panels per row.
         shared_y: Share the y range so the importance of features can be compared by eye.
         panel_height: Height of one panel row in px.
+        height: Total figure height in px; overrides the height computed from ``panel_height``.
 
     Raises:
         ValueError: no curves.
@@ -468,7 +470,9 @@ def plot_partial_dependence(
                             marker={"symbol": "line-ns-open", "size": 9, "color": st.muted}, row=r, col=c)  # fmt: skip
     fig.update_annotations(font={"size": 11, "color": st.ink_2})
     fig.update_yaxes(title_text="partial dependence", col=1)
-    return finish(fig, title, subtitle, height=max(HEIGHT, 120 + panel_height * rows), legend=False)
+    return finish(
+        fig, title, subtitle, height=height or max(HEIGHT, 120 + panel_height * rows), legend=False
+    )
 
 
 def plot_scree(

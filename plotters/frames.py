@@ -25,6 +25,7 @@ __all__ = [
     "group_by_prefix",
     "label_from",
     "as_value_series",
+    "group_summary",
 ]
 
 
@@ -301,3 +302,72 @@ def _one_column(frame: pd.DataFrame, name: str) -> pd.Series:
 def _as_array(values: pd.Series | np.ndarray) -> np.ndarray:
     """Plain float array of a Series, for passing to plotly."""
     return np.asarray(values, dtype=float)
+
+
+def group_summary(
+    frame: pd.DataFrame,
+    by: str,
+    value: str,
+    *,
+    stat: Literal["mean", "median"] = "mean",
+    level: float = 0.95,
+    method: Literal["normal", "bootstrap"] = "normal",
+    n_boot: int = 2000,
+    seed: int = 0,
+) -> pd.DataFrame:
+    """A statistic per group with a confidence interval, ready for ``plot_interval`` or bar error bars.
+
+    Args:
+        frame: Long DataFrame, one row per observation.
+        by: Column naming the group.
+        value: Numeric column to summarise.
+        stat: ``"mean"`` or ``"median"``.
+        level: Confidence level of the interval.
+        method: ``"normal"`` uses the standard error of the mean and a normal quantile (mean only,
+            and approximate for small groups); ``"bootstrap"`` resamples each group ``n_boot``
+            times and takes percentiles, which also works for the median and skewed data.
+        n_boot: Bootstrap resamples per group.
+        seed: Seed of the bootstrap, so the result is reproducible.
+
+    Returns:
+        DataFrame indexed by group with columns ``point``, ``low``, ``high``, ``n`` and ``error``
+        (the half-width for a symmetric interval, or the larger side for an asymmetric one).
+        ``frame.reset_index()`` of it feeds ``plot_interval(..., low="low", high="high",
+        point="point", label=by)``.
+
+    Raises:
+        ValueError: an unknown ``stat`` / ``method``, ``level`` outside (0, 1), ``"normal"`` with
+            the median, or a group with no finite values.
+    """
+    from statistics import NormalDist
+
+    _require_columns(frame, "group_summary", by=by, value=value)
+    if stat not in ("mean", "median"):
+        raise ValueError(f"stat must be 'mean' or 'median', got {stat!r}")
+    if method not in ("normal", "bootstrap"):
+        raise ValueError(f"method must be 'normal' or 'bootstrap', got {method!r}")
+    if not 0 < level < 1:
+        raise ValueError("level must be strictly between 0 and 1")
+    if method == "normal" and stat == "median":
+        raise ValueError(
+            "the normal interval is for the mean; use method='bootstrap' for the median"
+        )
+    rng = np.random.default_rng(seed)
+    z = NormalDist().inv_cdf(0.5 + level / 2)
+    rows: dict[str, dict[str, float]] = {}
+    for name, part in frame.groupby(by, sort=False):
+        x = pd.to_numeric(part[value], errors="coerce").to_numpy(dtype=float)
+        x = x[np.isfinite(x)]
+        if x.size == 0:
+            raise ValueError(f"group {name!r} has no finite values")
+        point = float(np.mean(x) if stat == "mean" else np.median(x))
+        if method == "normal":
+            half = z * float(np.std(x, ddof=1) / np.sqrt(x.size)) if x.size > 1 else float("nan")
+            low, high = point - half, point + half
+        else:
+            draws = rng.choice(x, size=(n_boot, x.size), replace=True)
+            stats_ = np.mean(draws, axis=1) if stat == "mean" else np.median(draws, axis=1)
+            low, high = (float(q) for q in np.quantile(stats_, [(1 - level) / 2, 0.5 + level / 2]))
+        rows[str(name)] = {"point": point, "low": low, "high": high, "n": float(x.size),
+                           "error": max(point - low, high - point)}  # fmt: skip
+    return pd.DataFrame.from_dict(rows, orient="index")

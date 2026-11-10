@@ -1,5 +1,6 @@
 """Time-series charts. All convention A (Series / wide DataFrame / dict) except
-:func:`plot_bars_with_line`, which takes a Series of bars and a convention-A line.
+:func:`plot_bars_with_line` (a Series of bars and a convention-A line) and
+:func:`plot_calendar_heatmap` (one Series with a DatetimeIndex).
 """
 
 from __future__ import annotations
@@ -26,6 +27,8 @@ __all__ = [
     "plot_drawdown",
     "plot_stacked",
     "plot_rolling",
+    "plot_line_band",
+    "plot_calendar_heatmap",
 ]
 
 Visibility = bool | str  # True, False or "legendonly"
@@ -172,6 +175,7 @@ def plot_series(
     logy: bool = False,
     logx: bool = False,
     slider: bool = False,
+    range_buttons: bool = False,
     fill: bool = False,
     bands: Mapping[str, float] | None = None,
     markers: Mapping[str, Any] | None = None,
@@ -199,6 +203,8 @@ def plot_series(
         logy: Logarithmic y axis with readable ticks (data must be > 0).
         logx: Logarithmic x axis (numeric index > 0).
         slider: Add a range slider under the x axis.
+        range_buttons: Add quick date-range buttons (1m, 3m, 6m, YTD, 1y, all) at the top right
+            of the plot. Needs a datetime x axis.
         fill: Fill each line down to zero.
         bands: ``{label: y}`` horizontal reference lines. Scalars, not series.
         markers: ``{label: x}`` vertical reference lines, e.g. events.
@@ -276,6 +282,27 @@ def plot_series(
     if percent:
         fig.update_yaxes(tickformat=_PERCENT_TICKS)
         fig.update_traces(hovertemplate="%{y:.2%}", selector={"type": "scatter"})
+    if range_buttons:
+        fig.update_xaxes(
+            rangeselector={
+                "buttons": [
+                    {"count": 1, "label": "1m", "step": "month", "stepmode": "backward"},
+                    {"count": 3, "label": "3m", "step": "month", "stepmode": "backward"},
+                    {"count": 6, "label": "6m", "step": "month", "stepmode": "backward"},
+                    {"label": "YTD", "step": "year", "stepmode": "todate"},
+                    {"count": 1, "label": "1y", "step": "year", "stepmode": "backward"},
+                    {"label": "all", "step": "all"},
+                ],
+                "x": 1,
+                "xanchor": "right",
+                "y": 1.0,
+                "yanchor": "bottom",
+                "bgcolor": st.surface,
+                "activecolor": st.grid,
+                "bordercolor": st.axis,
+                "font": {"size": 11, "color": st.ink_2},
+            }
+        )
     if slider:
         fig.update_xaxes(rangeslider={"visible": True, "thickness": 0.06})
     if logy:
@@ -295,7 +322,7 @@ def plot_series(
         width=width,
         slider=slider,
         legend=legend,
-        menu=bool(views),
+        menu=bool(views) or range_buttons,
     )
 
 
@@ -613,3 +640,102 @@ def plot_rolling(
     return finish(
         fig, title, sub, xlabel=xlabel, ylabel=ylabel, height=height, width=width, legend=legend
     )
+
+
+def plot_line_band(
+    data: SeriesLike,
+    lower: SeriesLike,
+    upper: SeriesLike,
+    title: str = "",
+    subtitle: str = "",
+    *,
+    series: Sequence[str] | None = None,
+    xlabel: str = "",
+    ylabel: str = "",
+    height: int = HEIGHT,
+) -> go.Figure:
+    """A line with an uncertainty ribbon behind it.
+
+    ``lower`` and ``upper`` take the same shape as ``data`` and must hold the same labels.
+
+    Args:
+        data: The central line(s): Series, wide DataFrame or ``{label: Series}``.
+        lower: Lower edge of each ribbon.
+        upper: Upper edge of each ribbon.
+        title: Figure title.
+        subtitle: Muted line under the title.
+        series: Subset and order of series.
+        xlabel: X axis title.
+        ylabel: Y axis title.
+        height: Figure height in px.
+
+    Raises:
+        KeyError: ``lower`` / ``upper`` lack a label present in ``data``.
+        ValueError: more than ``MAX_SERIES`` series.
+    """
+    centre = pick(as_series_dict(data, _caller="plot_line_band"), series)
+    lo = as_series_dict(lower, _caller="plot_line_band")
+    hi = as_series_dict(upper, _caller="plot_line_band")
+    if len(centre) > MAX_SERIES:
+        raise ValueError(f"plot_line_band draws at most {MAX_SERIES} series, got {len(centre)}")
+    for name in centre:
+        for which, d in (("lower", lo), ("upper", hi)):
+            if name not in d:
+                raise KeyError(f"{which} has no series {name!r}; it has {list(d)}")
+    fig = go.Figure()
+    for i, (name, s) in enumerate(centre.items()):
+        color = _style.color(i)
+        fig.add_scatter(x=hi[name].index, y=hi[name].to_numpy(), mode="lines", line={"width": 0}, hoverinfo="skip",
+                        showlegend=False, legendgroup=str(name))  # fmt: skip
+        fig.add_scatter(x=lo[name].index, y=lo[name].to_numpy(), mode="lines", line={"width": 0}, fill="tonexty",
+                        fillcolor=_color.with_alpha(color, 0.18), hoverinfo="skip", showlegend=False,
+                        legendgroup=str(name))  # fmt: skip
+        fig.add_scatter(x=s.index, y=s.to_numpy(), mode="lines", name=str(name), legendgroup=str(name),
+                        line={"color": color, "width": 2})  # fmt: skip
+    return finish(
+        fig, title, subtitle, xlabel=xlabel, ylabel=ylabel, height=height, legend=len(centre) > 1
+    )
+
+
+def plot_calendar_heatmap(
+    data: pd.Series,
+    title: str = "",
+    subtitle: str = "",
+    *,
+    fmt: str = ".4g",
+    height: int = 260,
+) -> go.Figure:
+    """A daily series as a weekday-by-week grid, shaded by value (like a contribution calendar).
+
+    Args:
+        data: Series with a DatetimeIndex; several values on one day are summed.
+        title: Figure title.
+        subtitle: Muted line under the title.
+        fmt: Format spec for the hover value.
+        height: Figure height in px.
+
+    Raises:
+        ValueError: the index is not a DatetimeIndex.
+    """
+    if not isinstance(data, pd.Series) or not isinstance(data.index, pd.DatetimeIndex):
+        raise ValueError("plot_calendar_heatmap needs a Series with a DatetimeIndex")
+    daily = data.astype(float).groupby(data.index.normalize()).sum()
+    full = daily.reindex(pd.date_range(daily.index.min(), daily.index.max(), freq="D"))
+    days = pd.DatetimeIndex(full.index)
+    week_start = days - pd.to_timedelta(days.day_of_week, unit="D")
+    grid = pd.DataFrame({"week": week_start, "day": days.day_of_week, "v": full.to_numpy()})
+    z = grid.pivot(index="day", columns="week", values="v").reindex(range(7))
+    st = _style.get_style()
+    names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    dates = [
+        [(pd.Timestamp(w) + pd.Timedelta(days=int(d))).strftime("%Y-%m-%d") for w in z.columns]
+        for d in z.index
+    ]
+    fig = go.Figure(go.Heatmap(
+        z=z.to_numpy(), x=z.columns, y=names, colorscale=_style.sequential_scale(), xgap=2, ygap=2, customdata=dates,
+        hovertemplate="%{customdata}: %{z:" + fmt + "}<extra></extra>",
+        colorbar={"thickness": 10, "outlinewidth": 0, "tickfont": {"size": 10, "color": st.muted}},
+    ))  # fmt: skip
+    fig.update_yaxes(autorange="reversed", showgrid=False, type="category")
+    fig.update_xaxes(showgrid=False, tickformat="%b", dtick="M1")
+    return finish(fig, title, subtitle, height=height, legend=False)

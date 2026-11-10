@@ -128,7 +128,7 @@ def cat_waterfall():
 
 
 @card(
-    "Categorical",
+    "Time series",
     "plot_line_band",
     [
         "A line with a translucent ribbon in the same colour; two series have independent ribbons.",
@@ -146,7 +146,7 @@ def cat_band():
 
 
 @card(
-    "Categorical",
+    "Relationships",
     "plot_regression",
     [
         "Scatter with an OLS line and a 95% band for the mean; the subtitle reports slope and R-squared.",
@@ -161,7 +161,7 @@ def cat_regression():
 
 
 @card(
-    "Categorical",
+    "Relationships",
     "plot_scatter_matrix",
     [
         "Histograms on the diagonal, pairwise scatter below it; axis titles on the outer edge only.",
@@ -177,7 +177,7 @@ def cat_matrix():
 
 
 @card(
-    "Categorical",
+    "Time series",
     "plot_calendar_heatmap",
     [
         "Weekday rows by week columns, shaded by value; month ticks along the bottom.",
