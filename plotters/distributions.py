@@ -57,6 +57,7 @@ def plot_null_test(
     tail: Literal["two-sided", "left", "right"] = "two-sided",
     bins: int = 60,
     xlabel: str = "statistic",
+    observed_label: str = "observed",
     height: int = HEIGHT,
     width: int | None = None,
 ) -> go.Figure:
@@ -76,6 +77,8 @@ def plot_null_test(
         tail: ``"two-sided"`` (``alpha / 2`` in each tail), ``"left"`` or ``"right"``.
         bins: Histogram bins.
         xlabel: X axis title.
+        observed_label: Text written next to the observed line, e.g. ``"equal predictive
+            ability"`` when ``observed`` is 0.
         height: Figure height in px.
         width: Figure width in px; ``None`` fills the container.
 
@@ -122,7 +125,7 @@ def plot_null_test(
                   line={"color": st.ink, "width": 2})  # fmt: skip
     left_half = observed < (lo + hi) / 2
     fig.add_annotation(xref="x", x=observed, yref="paper", y=0.98, yanchor="top", xanchor="left" if left_half else "right",
-                       xshift=5 if left_half else -5, showarrow=False, text="observed",
+                       xshift=5 if left_half else -5, showarrow=False, text=observed_label,
                        font={"size": 10, "color": st.ink})  # fmt: skip
     verdict = "reject H0" if p < alpha else "cannot reject H0"
     fig.add_annotation(

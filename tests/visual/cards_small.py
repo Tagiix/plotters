@@ -89,6 +89,43 @@ def sm_shaded_bubbles():
 
 
 @card(
+    "Relationships",
+    "plot_shaded_scatter: many labelled points",
+    [
+        "800 points with label=: no text printed over the cloud, the pair name appears on hover.",
+    ],
+)
+def sm_shaded_many_labels():
+    rng = np.random.default_rng(5)
+    t = pd.DataFrame(
+        {
+            "x": rng.uniform(0.3, 0.8, 800),
+            "y": rng.normal(0, 8, 800),
+            "ratio": np.exp(rng.normal(0, 0.5, 800)),
+            "pair": [f"model_{i} + model_{i + 1}" for i in range(800)],
+        }
+    )
+    return pl.plot_shaded_scatter(
+        t, "x", "y", "ratio", "Hover names a point", label="pair", log_shade=True, reference=1.0
+    )
+
+
+@card(
+    "Time series",
+    "plot_series: isolated points",
+    [
+        "A series with one value and a series with gaps keep a visible dot where a line cannot be drawn.",
+    ],
+)
+def sm_isolated_points():
+    idx = pd.date_range("2024-01-01", periods=60)
+    data = pd.DataFrame({"continuous": np.sin(np.arange(60) / 6), "one value": np.nan}, index=idx)
+    data.loc[idx[30], "one value"] = 0.5
+    data["gaps"] = np.where(np.arange(60) % 9 == 4, -0.5, np.nan)
+    return pl.plot_series(data, "Isolated points stay visible", drawn=0)
+
+
+@card(
     "Categorical",
     "plot_bars: error bars",
     [

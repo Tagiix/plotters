@@ -193,3 +193,29 @@ def test_grid_refuses_menus_non_cartesian_and_nothing():
         pl.plot_grid({"p": go.Figure(go.Pie(values=[1, 2]))})
     with pytest.raises(ValueError, match="at least one"):
         pl.plot_grid({})
+
+
+def _pairs(n):
+    r = np.random.default_rng(0)
+    return pd.DataFrame(
+        {"x": r.uniform(0.3, 0.8, n), "y": r.normal(size=n), "s": r.uniform(0.5, 2, n),
+         "p": [f"pair{k}" for k in range(n)]}
+    )  # fmt: skip
+
+
+def test_labels_are_written_only_when_few_and_always_on_hover():
+    for fn, extra in ((pl.plot_shaded_scatter, {"shade": "s"}), (pl.plot_scatter, {})):
+        few = fn(_pairs(10), "x", "y", label="p", **extra).data[0]
+        many = fn(_pairs(500), "x", "y", label="p", **extra).data[0]
+        assert few.mode == "markers+text" and many.mode == "markers"
+        assert "%{text}" in many.hovertemplate
+
+
+def test_scatter_hover_is_closest_point():
+    assert pl.plot_scatter(_pairs(20), "x", "y").layout.hovermode == "closest"
+    assert pl.plot_shaded_scatter(_pairs(20), "x", "y", "s").layout.hovermode == "closest"
+
+
+def test_log_shade_reference_must_be_positive():
+    with pytest.raises(ValueError, match="log_shade"):
+        pl.plot_shaded_scatter(_pairs(20), "x", "y", "s", log_shade=True, reference=0.0)

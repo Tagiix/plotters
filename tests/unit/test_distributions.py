@@ -154,3 +154,8 @@ def test_expectile_curve_passes_through_one_and_is_steeper_for_heavier_tails(rng
     assert fat.y[-1] > thin.y[-1] > 1
     with pytest.raises(ValueError, match="positive mean"):
         pl.plot_expectile_curve(pd.Series(-df["thin"]))
+
+
+def test_null_test_observed_label():
+    fig = pl.plot_null_test(np.random.default_rng(0).normal(size=300), 0.0, observed_label="equal")
+    assert any(a.text == "equal" for a in fig.layout.annotations)

@@ -21,6 +21,9 @@ from ._errors import convention_error
 from .frames import _one_column, _require_columns
 from .layout import HEIGHT, apply_log, finish
 
+_MAX_WRITTEN_LABELS = 40
+"""Past this many points a label is hover-only: written next to every point it is unreadable."""
+
 __all__ = [
     "plot_scatter",
     "plot_shaded_scatter",
@@ -79,7 +82,8 @@ def plot_scatter(
         title: Figure title.
         subtitle: Muted line under the title.
         group: Column whose values each become one coloured series (at most 3 values).
-        label: Column written next to each point.
+        label: Column naming each point. Always shown on hover; also written next to the points
+            when there are at most 40 of them (more would overprint).
         size: Non-negative numeric column that sets each marker's **area** (a bubble chart). The
             default subtitle says so.
         diagonal: Draw ``y = x``.
@@ -122,11 +126,14 @@ def plot_scatter(
                 opacity=0.7,
                 line={"width": 1, "color": st.surface},
             )
+        written = bool(label) and int(mask.sum()) <= _MAX_WRITTEN_LABELS
         fig.add_scatter(
-            x=xs[mask], y=ys[mask], mode="markers+text" if label else "markers", name=name,
+            x=xs[mask], y=ys[mask], mode="markers+text" if written else "markers", name=name,
             marker=marker, text=text, textposition="top right", textfont={"size": 10, "color": st.muted},
+            hovertemplate=(f"%{{text}}<br>{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<extra>{name}</extra>" if label else None),
             showlegend=group is not None,
         )  # fmt: skip
+    fig.update_layout(hovermode="closest")  # the theme's "x unified" cannot pick one point
     if diagonal:
         lo, hi = float(min(np.nanmin(xs), np.nanmin(ys))), float(max(np.nanmax(xs), np.nanmax(ys)))
         fig.add_scatter(x=[lo, hi], y=[lo, hi], mode="lines", name="y = x", showlegend=False,
@@ -171,7 +178,8 @@ def plot_shaded_scatter(
         shade: Numeric column that sets the colour.
         title: Figure title.
         subtitle: Muted line under the title.
-        label: Column written next to each point.
+        label: Column naming each point. Always shown on hover; also written next to the points
+            when there are at most 40 of them (more would overprint).
         size: Non-negative numeric column that sets each marker's area, so one chart carries four
             variables (x, y, colour and size).
         log_shade: Colour by ``log10(shade)`` for a geometric ratio (needs positive values);
@@ -211,6 +219,11 @@ def plot_shaded_scatter(
         "line": {"width": 0.6, "color": st.surface},
     }
     if reference is not None:
+        if log_shade and reference <= 0:
+            raise ValueError(
+                f"{caller}: reference={reference:g} cannot centre a log_shade colour scale "
+                "(log of a non-positive number); use a positive reference such as 1.0 for a ratio"
+            )
         center = math.log10(reference) if log_shade else reference
         span = max(abs(cmin - center), abs(cmax - center)) or 1.0
         marker.update(colorscale=_style.diverging_scale(), cmin=center - span, cmax=center + span)
@@ -225,11 +238,14 @@ def plot_shaded_scatter(
         "ticktext": [f"{10**t:.3g}" if log_shade else f"{t:.3g}" for t in ticks],
     }  # fmt: skip
     text = _one_column(frame, label).astype(str).to_numpy() if label else None
+    written = bool(label) and len(xs) <= _MAX_WRITTEN_LABELS
+    head = "%{text}<br>" if label else ""
     fig = go.Figure(go.Scatter(
-        x=xs, y=ys, mode="markers+text" if label else "markers", marker=marker, text=text,
+        x=xs, y=ys, mode="markers+text" if written else "markers", marker=marker, text=text,
         textposition="top right", textfont={"size": 10, "color": st.muted}, customdata=sh,
-        hovertemplate=f"{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<br>{shade}=%{{customdata:.4g}}<extra></extra>",
+        hovertemplate=f"{head}{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<br>{shade}=%{{customdata:.4g}}<extra></extra>",
     ))  # fmt: skip
+    fig.update_layout(hovermode="closest")
     if logx:
         apply_log(fig, "x", *_log_bounds(xs, caller, "x"))
     if logy:

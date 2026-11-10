@@ -53,6 +53,14 @@ def _line(i: int, *, vary_dash: bool = False, width: float | None = None) -> dic
     return {"color": _style.color(i), "dash": dash, "width": width or w}
 
 
+def _isolated(y: Any) -> np.ndarray:
+    """Finite values with no finite neighbour: a line draws nothing for them."""
+    ok = np.isfinite(np.asarray(y, dtype=float))
+    left = np.concatenate(([False], ok[:-1]))
+    right = np.concatenate((ok[1:], [False]))
+    return ok & ~left & ~right
+
+
 def _resolve_visibility(
     names: Sequence[str],
     views: Mapping[str, Sequence[str]] | None,
@@ -240,7 +248,8 @@ def plot_series(
             between named subsets of the series already passed. Every series is drawn once
             and the menu toggles ``visible``, so an exported HTML keeps working with no
             server. A series named in no view stays visible in all of them.
-        drawn: How many series start drawn (default 20).
+        drawn: How many series start drawn (default 20; ``0`` also means the default, it never
+            hides everything). The rest are greyed out in the legend.
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
@@ -252,14 +261,17 @@ def plot_series(
 
     Raises:
         KeyError: ``series`` or ``views`` names a label that is not in ``data``.
-        ValueError: a log axis was requested but the data is not strictly positive.
+        ValueError: a log axis was requested but the data is not strictly positive, or
+            ``drawn`` is negative.
 
     Example:
         >>> pl.plot_series(returns, "Daily returns", percent=True)
     """
     frames = pick(as_series_dict(data, _caller="plot_series"), series)
     names = list(frames)
-    visibility = _resolve_visibility([str(n) for n in names], views, drawn)
+    if drawn < 0:
+        raise ValueError(f"drawn must be 0 (the default) or positive, got {drawn}")
+    visibility = _resolve_visibility([str(n) for n in names], views, drawn or MAX_VISIBLE)
     first = next(iter(visibility.values()))
     st = _style.get_style()
 
@@ -278,6 +290,12 @@ def plot_series(
         )
         if fill:
             trace.update(fill="tozeroy", fillcolor=_color.with_alpha(line["color"], 0.12))  # type: ignore[arg-type]
+        isolated = _isolated(s.to_numpy())
+        if isolated.any():  # a lone point has no line to draw it
+            trace.update(
+                mode="lines+markers",
+                marker={"size": np.where(isolated, 7, 0).tolist(), "color": line["color"]},
+            )
         fig.add_trace(trace)
 
     _add_reference_lines(fig, bands, markers, logy, logx, spans)

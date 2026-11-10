@@ -16,4 +16,5 @@ First release.
 - Reorganised for readability: new `relationships` module (scatter family), `comparisons` reduced to model comparison, shared checks in `_checks`; README restructured around a task-to-function table; gallery sections mirror the README.
 - Every plotly plotter takes `width=` and `height=` (as in `plotly.express`); a test calls all 63 with both.
 - `plot_views` keeps a series' colour across views (same trace name, same colour); `plot_series(drawn=)` (was `max_visible`).
+- Fixes: `plot_series(drawn=0)` means the default instead of hiding every series; isolated points (a lone value between gaps) get a marker; `label=` on `plot_scatter` / `plot_shaded_scatter` is written on the plot only up to 40 points and is always on hover (hover is `closest`, not `x unified`); `plot_shaded_scatter` raises a clear error for `log_shade` with `reference <= 0`; `plot_null_test(observed_label=)`.
 - Visual gallery (`python -m tests.visual`) and a unit test suite.

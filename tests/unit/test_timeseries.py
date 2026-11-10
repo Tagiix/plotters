@@ -138,3 +138,21 @@ def test_views_reuse_colours_from_the_start():
     color = {t.name: t.line.color for t in fig.data}
     assert color["a1"] == color["b1"] and color["a2"] == color["b2"]
     assert len({color["pool"], color["a1"], color["a2"]}) == 3
+
+
+def test_drawn_zero_means_default_not_hidden():
+    idx = pd.date_range("2020", periods=5)
+    data = pd.DataFrame({"a": np.arange(5.0), "b": np.arange(5.0)}, index=idx)
+    assert [t.visible for t in pl.plot_series(data, drawn=0).data] == [True, True]
+    with pytest.raises(ValueError, match="drawn"):
+        pl.plot_series(data, drawn=-1)
+
+
+def test_isolated_points_get_a_marker():
+    idx = pd.date_range("2020", periods=6)
+    data = pd.DataFrame(
+        {"full": np.arange(6.0), "one": [np.nan, np.nan, 3.0, np.nan, np.nan, np.nan]}, index=idx
+    )
+    full, one = pl.plot_series(data).data
+    assert full.mode == "lines"
+    assert one.mode == "lines+markers" and list(one.marker.size) == [0, 0, 7, 0, 0, 0]
