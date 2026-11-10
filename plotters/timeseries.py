@@ -43,9 +43,20 @@ def _x(index: pd.Index) -> pd.Index:
 def _guard_series_count(frames: Mapping[str, pd.Series], caller: str) -> None:
     if len(frames) > MAX_SERIES:
         raise ValueError(
-            f"{caller} draws at most {MAX_SERIES} series (one per categorical colour), got "
+            f"{caller} draws at most {MAX_SERIES} series, got "
             f"{len(frames)}. Pass series=[...] to choose, or use plot_series, which has no limit."
         )
+
+
+def _initial_visibility(count: int, drawn: int) -> list[Visibility]:
+    """``True`` for the first ``drawn`` series, ``"legendonly"`` for the rest (one click to add).
+
+    ``drawn=0`` means the default (``MAX_VISIBLE``); it never hides everything.
+    """
+    if drawn < 0:
+        raise ValueError(f"drawn must be 0 (the default) or positive, got {drawn}")
+    limit = drawn or MAX_VISIBLE
+    return [True if i < limit else "legendonly" for i in range(count)]
 
 
 def _line(i: int, *, vary_dash: bool = False, width: float | None = None) -> dict[str, object]:
@@ -80,7 +91,7 @@ def _resolve_visibility(
       best 8 of 42 would leave 34 "unnamed" series drawn everywhere.
     """
     if not views:
-        return {"": [True if i < drawn else "legendonly" for i in range(len(names))]}
+        return {"": _initial_visibility(len(names), drawn)}
 
     unknown = sorted({n for members in views.values() for n in members if n not in names})
     if unknown:
@@ -269,9 +280,8 @@ def plot_series(
     """
     frames = pick(as_series_dict(data, _caller="plot_series"), series)
     names = list(frames)
-    if drawn < 0:
-        raise ValueError(f"drawn must be 0 (the default) or positive, got {drawn}")
     visibility = _resolve_visibility([str(n) for n in names], views, drawn or MAX_VISIBLE)
+    _initial_visibility(0, drawn)  # validates drawn
     first = next(iter(visibility.values()))
     st = _style.get_style()
 
@@ -441,6 +451,7 @@ def plot_cumulative(
     series: Sequence[str] | None = None,
     compound: bool = False,
     logy: bool = False,
+    drawn: int = MAX_VISIBLE,
     xlabel: str = "",
     ylabel: str = "Growth of 1",
     height: int = HEIGHT,
@@ -457,6 +468,8 @@ def plot_cumulative(
         compound: ``True`` for reinvested growth (``cumprod(1 + r)``); the default adds the
             values (``1 + cumsum(r)``). Missing values count as zero.
         logy: Log y axis; use with ``compound=True``.
+        drawn: How many series start drawn (default 20; ``0`` also means the default). The rest
+            are greyed out in the legend, one click to add.
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
@@ -464,15 +477,22 @@ def plot_cumulative(
         legend: ``None`` shows it for more than one series.
 
     Raises:
-        ValueError: more than ``MAX_SERIES`` series.
+        ValueError: ``drawn`` is negative.
     """
     frames = pick(as_series_dict(data, _caller="plot_cumulative"), series)
-    _guard_series_count(frames, "plot_cumulative")
+    flags = _initial_visibility(len(frames), drawn)
     curves = {n: _wealth(s, compound) for n, s in frames.items()}
     fig = go.Figure()
     for i, (name, s) in enumerate(curves.items()):
         fig.add_trace(
-            go.Scatter(x=_x(s.index), y=s.to_numpy(), name=str(name), mode="lines", line=_line(i))
+            go.Scatter(
+                x=_x(s.index),
+                y=s.to_numpy(),
+                name=str(name),
+                mode="lines",
+                line=_line(i),
+                visible=flags[i],
+            )
         )
     if logy:
         apply_log(fig, "y", *_positive_bounds(curves))
@@ -495,6 +515,7 @@ def plot_drawdown(
     *,
     series: Sequence[str] | None = None,
     compound: bool = True,
+    drawn: int = MAX_VISIBLE,
     xlabel: str = "",
     ylabel: str = "Drawdown",
     height: int = HEIGHT,
@@ -510,6 +531,8 @@ def plot_drawdown(
         series: Subset and order of series.
         compound: Peak-relative drop of the compounded curve (percent). ``False`` measures
             the drop of the summed curve in the data's own units.
+        drawn: How many series start drawn (default 20; ``0`` also means the default). The rest
+            are greyed out in the legend, one click to add.
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
@@ -517,10 +540,10 @@ def plot_drawdown(
         legend: ``None`` shows it for more than one series.
 
     Raises:
-        ValueError: more than ``MAX_SERIES`` series.
+        ValueError: ``drawn`` is negative.
     """
     frames = pick(as_series_dict(data, _caller="plot_drawdown"), series)
-    _guard_series_count(frames, "plot_drawdown")
+    flags = _initial_visibility(len(frames), drawn)
     fig = go.Figure()
     for i, (name, s) in enumerate(frames.items()):
         wealth = _wealth(s, compound)
@@ -535,6 +558,7 @@ def plot_drawdown(
                 line=line,
                 fill="tozeroy",
                 fillcolor=_color.with_alpha(line["color"], 0.18),  # type: ignore[arg-type]
+                visible=flags[i],
             )
         )
     if compound:
@@ -617,6 +641,7 @@ def plot_rolling(
     *,
     how: Literal["mean", "std", "var", "median", "min", "max", "sum", "skew", "kurt"] = "mean",
     series: Sequence[str] | None = None,
+    drawn: int = MAX_VISIBLE,
     xlabel: str = "",
     ylabel: str = "",
     height: int = HEIGHT,
@@ -638,6 +663,8 @@ def plot_rolling(
         how: Statistic: ``"mean"``, ``"std"``, ``"var"``, ``"median"``, ``"min"``,
             ``"max"``, ``"sum"``, ``"skew"`` or ``"kurt"``.
         series: Subset and order of series.
+        drawn: How many series start drawn (default 20; ``0`` also means the default). The rest
+            are greyed out in the legend, one click to add.
         xlabel: X axis title.
         ylabel: Y axis title.
         height: Figure height in px.
@@ -645,17 +672,18 @@ def plot_rolling(
         legend: ``None`` shows it for more than one series.
 
     Raises:
-        ValueError: unknown ``how``, a window below 2, or more than ``MAX_SERIES`` series.
+        ValueError: unknown ``how``, a window below 2, or ``drawn`` negative.
     """
     if how not in _ROLLING:
         raise ValueError(f"how must be one of {list(_ROLLING)}, got {how!r}")
     if window < 2:
         raise ValueError("window must be at least 2")
     frames = pick(as_series_dict(data, _caller="plot_rolling"), series)
-    _guard_series_count(frames, "plot_rolling")
+    flags = _initial_visibility(len(frames), drawn)
     fig = go.Figure()
     for i, (name, s) in enumerate(frames.items()):
         color = _style.color(i)
+        dash = _line(i)["dash"]
         rolled = getattr(s.astype(float).rolling(window), how)()
         fig.add_trace(
             go.Scatter(
@@ -667,6 +695,7 @@ def plot_rolling(
                 mode="lines",
                 line={"color": _color.with_alpha(color, 0.35), "width": 1},
                 hoverinfo="skip",
+                visible=flags[i],
             )
         )
         fig.add_trace(
@@ -676,7 +705,8 @@ def plot_rolling(
                 name=str(name),
                 legendgroup=str(name),
                 mode="lines",
-                line={"color": color, "width": 2.2},
+                line={"color": color, "width": 2.2, "dash": dash},
+                visible=flags[i],
             )
         )
     sub = subtitle or f"rolling {how}, window {window}; raw series in lighter ink"

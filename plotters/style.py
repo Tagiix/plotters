@@ -6,6 +6,7 @@ afterwards, plotters' or plain ``go.Figure``, picks up the fonts, colours and gr
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -41,6 +42,9 @@ MONO = "'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace"
 # The order is the safety mechanism: neighbours were chosen to stay distinguishable under
 # protan / deutan / tritan simulation. Re-order or edit a value and
 # tests/unit/test_palette.py will tell you whether the guarantees still hold.
+# The first eight are the original palette; slots 8 to 14 were added by a search that keeps every
+# prefix of eight or more valid (each slot is also colour-blind-distinct from slot 0, so the wrap
+# back to the start is safe whatever size set_style(colors=) picks).
 _CATEGORICAL_LIGHT = (
     "#2b5cda",  # blue
     "#b03e00",  # rust
@@ -50,6 +54,13 @@ _CATEGORICAL_LIGHT = (
     "#ac81bf",  # lavender
     "#11a57a",  # green
     "#627201",  # olive
+    "#963096",  # purple
+    "#979257",  # khaki
+    "#19726c",  # teal
+    "#875807",  # brown
+    "#c77187",  # rose
+    "#06773c",  # forest
+    "#ba7f6a",  # clay
 )
 _CATEGORICAL_DARK = (
     "#4c7ef3",
@@ -60,7 +71,19 @@ _CATEGORICAL_DARK = (
     "#caa2dc",
     "#16c995",
     "#7e910c",
+    "#b750b6",
+    "#b6b175",
+    "#3e9089",
+    "#a67531",
+    "#e990a5",
+    "#369558",
+    "#db9e88",
 )
+
+MIN_COLORS = 8
+"""Smallest palette ``set_style(colors=)`` accepts: the original, fully validated set."""
+MAX_COLORS = len(_CATEGORICAL_LIGHT)
+"""Largest validated palette; the default."""
 
 _SEQUENTIAL_HUE = 255.0  # blue
 _DIVERGING_HUES = (255.0, 50.0)  # blue ↔ orange; the first pole is the "low" side
@@ -160,6 +183,7 @@ DARK = Style(
 )
 
 _current: Style = LIGHT
+_colors: int = MAX_COLORS
 
 
 def _build_template(style: Style) -> go.layout.Template:
@@ -219,7 +243,15 @@ def _resolve(dark: bool | Literal["auto"]) -> Style:
     return DARK if dark else LIGHT
 
 
-def set_style(dark: bool | Literal["auto"] = False) -> Style:
+def _apply_colors(colors: int) -> None:
+    """Install ``colors`` categorical slots in both templates (the colorway of plain figures)."""
+    global _colors
+    _colors = colors
+    for mode in (LIGHT, DARK):
+        pio.templates[mode.name].update(layout={"colorway": list(mode.categorical[:colors])})
+
+
+def set_style(dark: bool | Literal["auto"] = False, colors: int | None = None) -> Style:
     """Choose the light or dark theme for everything drawn from now on.
 
     Also installs the matching plotly template as the default, so plain ``go.Figure``
@@ -228,50 +260,63 @@ def set_style(dark: bool | Literal["auto"] = False) -> Style:
     Args:
         dark: ``True`` for the dark theme, ``False`` for light. ``"auto"`` reads the
             ``PLOTTERS_STYLE`` environment variable (``"dark"``) and otherwise picks light.
+        colors: How many categorical colours to cycle through, from 8 to 15. ``None`` keeps the
+            current setting, which starts at the maximum (15). A smaller palette repeats sooner
+            (a repeated colour then changes dash) but its colours are fewer to tell apart; every
+            size keeps the colour-blind guarantees of ``tests/unit/test_palette.py``.
 
     Returns:
         The :class:`Style` now in force.
 
+    Raises:
+        ValueError: ``colors`` outside 8 to 15.
+
     Example:
         >>> import plotters as pl
         >>> pl.set_style(dark=True)  # once, at the top
+        >>> pl.set_style(colors=10)  # fewer, easier-to-tell-apart colours
     """
     global _current
+    if colors is not None:
+        if not MIN_COLORS <= colors <= MAX_COLORS:
+            raise ValueError(f"colors must be between {MIN_COLORS} and {MAX_COLORS}, got {colors}")
+        _apply_colors(colors)
     _current = _resolve(dark)
     pio.templates.default = _current.name
     return _current
 
 
 @contextmanager
-def use_style(dark: bool | Literal["auto"] = False) -> Iterator[Style]:
-    """Temporarily switch theme, restoring the previous one on exit.
+def use_style(dark: bool | Literal["auto"] = False, colors: int | None = None) -> Iterator[Style]:
+    """Temporarily switch theme (and palette size), restoring the previous ones on exit.
 
     Args:
         dark: Same meaning as in :func:`set_style`.
+        colors: Same meaning as in :func:`set_style`.
 
     Example:
         >>> with pl.use_style(dark=True):
         ...     fig = pl.plot_series(returns, "Daily returns")
     """
-    previous = _current
+    previous, previous_colors = _current, _colors
     try:
-        yield set_style(dark)
+        yield set_style(dark, colors)
     finally:
-        set_style(previous.dark)
+        set_style(previous.dark, previous_colors)
 
 
 def palette() -> tuple[str, ...]:
-    """The eight categorical colours of the current style, in slot order."""
-    return _current.categorical
+    """The categorical colours of the current style (see ``set_style(colors=)``), in slot order."""
+    return _current.categorical[:_colors]
 
 
 def color(i: int) -> str:
-    """Categorical colour for series slot ``i``; slots wrap after eight.
+    """Categorical colour for series slot ``i``; slots wrap after the palette size (15 by default).
 
     Args:
         i: Zero-based series index.
     """
-    cats = _current.categorical
+    cats = palette()
     return cats[i % len(cats)]
 
 
@@ -284,9 +329,9 @@ _DASHES = ("solid", "dash", "dot", "dashdot", "longdash", "longdashdot")
 def line_style(i: int, *, vary_dash: bool = False) -> tuple[str, float]:
     """Dash pattern and width for series slot ``i``.
 
-    The first eight slots are solid, one per colour (on screen the legend isolates a
-    series on click). Past eight the dash changes on each wrap so a repeated colour is
-    still a different line. Set ``vary_dash`` for print, where there is no legend to click
+    The first slots are solid, one per colour (on screen the legend isolates a series on
+    click). Past the palette size the dash changes on each wrap so a repeated colour is still
+    a different line. Set ``vary_dash`` for print, where there is no legend to click
     and colour alone is not enough.
 
     Args:
@@ -296,7 +341,7 @@ def line_style(i: int, *, vary_dash: bool = False) -> tuple[str, float]:
     Returns:
         ``(plotly dash name, line width in px)``.
     """
-    n = len(_current.categorical)
+    n = _colors
     dash = _DASHES[i % len(_DASHES)] if vary_dash else _DASHES[(i // n) % len(_DASHES)]
     return dash, 2.0
 
@@ -315,11 +360,11 @@ _FILLS = ("", "-open", "-open-dot")
 
 
 def marker(i: int, *, size: float = 8) -> dict[str, object]:
-    """Marker style for scatter slot ``i``; unique for 8 × 8 × 3 = 192 slots.
+    """Marker style for scatter slot ``i``; unique for 192 slots at any palette size.
 
-    Colour and shape both have eight entries, so cycling them together would make slot 8
-    identical to slot 0 in both. The shape therefore shifts by one on each colour wrap, and
-    the fill (solid, open, open with dot) changes only after all 64 colour/shape pairs.
+    Colour and shape cycle together and would repeat as a pair after ``lcm(colours, 8)`` slots,
+    so the shape shifts by one after each such block; the fill (solid, open, open with dot)
+    changes only after every colour/shape pair has been used.
 
     Args:
         i: Zero-based series index.
@@ -328,8 +373,8 @@ def marker(i: int, *, size: float = 8) -> dict[str, object]:
     Returns:
         A plotly ``marker`` dict with ``symbol``, ``size`` and ``color``.
     """
-    n = len(_current.categorical)
-    wrap = i // n
+    n = _colors
+    wrap = i // math.lcm(n, len(_SHAPES))  # colour and shape repeat together after one lcm
     shape = _SHAPES[(i + wrap) % len(_SHAPES)]
     fill = _FILLS[(i // (n * len(_SHAPES))) % len(_FILLS)]
     return {"symbol": shape + fill, "size": size, "color": color(i)}

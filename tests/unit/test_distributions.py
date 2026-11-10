@@ -27,14 +27,15 @@ def test_null_test_reads_either_way_round(rng):
     )
 
 
-def test_null_test_one_sided_and_rejection_region_colours(rng):
+def test_null_test_one_sided_and_rejection_region_bands(rng):
     null = rng.normal(size=20_000)
-    left = pl.plot_null_test(null, -2.0, tail="left")
-    colors = list(left.data[0].marker.color)
-    assert colors[0] != colors[-1], "only the left tail is shaded"
-    two = pl.plot_null_test(null, 0.0)
-    c2 = list(two.data[0].marker.color)
-    assert c2[0] == c2[-1] != c2[len(c2) // 2]
+
+    def rects(fig):
+        return [sh for sh in fig.layout.shapes if sh.type == "rect"]
+
+    left = rects(pl.plot_null_test(null, -2.0, tail="left"))
+    assert len(left) == 1 and left[0].x1 < 0, "only the left tail is shaded"
+    assert len(rects(pl.plot_null_test(null, 0.0))) == 2
 
 
 def test_null_test_validates(rng):
@@ -158,4 +159,4 @@ def test_expectile_curve_passes_through_one_and_is_steeper_for_heavier_tails(rng
 
 def test_null_test_observed_label():
     fig = pl.plot_null_test(np.random.default_rng(0).normal(size=300), 0.0, observed_label="equal")
-    assert any(a.text == "equal" for a in fig.layout.annotations)
+    assert any(a.text == "equal +0" for a in fig.layout.annotations)

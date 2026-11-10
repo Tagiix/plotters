@@ -223,7 +223,7 @@ def plot_grouped_bars(
         raise convention_error("plot_grouped_bars", "D", frame)
     if frame.shape[1] > MAX_SERIES:
         raise ValueError(
-            f"plot_grouped_bars draws at most {MAX_SERIES} series (one per colour), got {frame.shape[1]}"
+            f"plot_grouped_bars draws at most {MAX_SERIES} series, got {frame.shape[1]}"
         )
     stack = stacked or normalize
     if stack and (frame.to_numpy(dtype=float) < 0).any():

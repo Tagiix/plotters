@@ -37,7 +37,7 @@ def _bags(
     frames = pick(as_series_dict(data, _caller=caller), series)
     if cap and len(frames) > MAX_SERIES:
         raise ValueError(
-            f"{caller} draws at most {MAX_SERIES} series (one per colour), got {len(frames)}; "
+            f"{caller} draws at most {MAX_SERIES} series, got {len(frames)}; "
             "pass series=[...] to choose."
         )
     bags = {str(n): _finite(s).to_numpy() for n, s in frames.items()}
@@ -115,27 +115,35 @@ def plot_null_test(
     counts, _ = np.histogram(x, edges)
     centers = (edges[:-1] + edges[1:]) / 2
     bin_width = edges[1] - edges[0]
-    reject = (centers <= lo_cut) | (centers >= hi_cut)
-    colors = [_color.with_alpha(st.negative if r else st.accent, 0.8 if r else 0.5) for r in reject]
     fig = go.Figure(
-        go.Bar(x=centers, y=counts / (n * bin_width), width=bin_width, marker={"color": colors, "line": {"width": 0}},
-               showlegend=False, hovertemplate="%{x:.4g}<extra></extra>")
+        go.Bar(x=centers, y=counts / (n * bin_width), width=bin_width, marker={"color": _color.with_alpha(st.accent, 0.55), "line": {"width": 0}},
+               showlegend=False, hovertemplate="%{x:.4g}<br>density %{y:.3g}<extra></extra>")
     )  # fmt: skip
+    # The rejection region as a band per tail, full height, so "in the tail" is seen directly.
+    bands = [(lo - pad, lo_cut)] if np.isfinite(lo_cut) else []
+    bands += [(hi_cut, hi + pad)] if np.isfinite(hi_cut) else []
+    for x0, x1 in bands:
+        fig.add_shape(type="rect", xref="x", x0=x0, x1=x1, yref="paper", y0=0, y1=1, layer="below",
+                      fillcolor=_color.with_alpha(st.negative, 0.16), line={"width": 0})  # fmt: skip
+    for cut in (c for c in (lo_cut, hi_cut) if np.isfinite(c)):
+        fig.add_shape(type="line", xref="x", x0=cut, x1=cut, yref="paper", y0=0, y1=1,
+                      line={"color": st.negative, "width": 1, "dash": "dot"})  # fmt: skip
     fig.add_shape(type="line", xref="x", x0=observed, x1=observed, yref="paper", y0=0, y1=1,
                   line={"color": st.ink, "width": 2})  # fmt: skip
     left_half = observed < (lo + hi) / 2
     fig.add_annotation(xref="x", x=observed, yref="paper", y=0.98, yanchor="top", xanchor="left" if left_half else "right",
-                       xshift=5 if left_half else -5, showarrow=False, text=observed_label,
+                       xshift=5 if left_half else -5, showarrow=False, text=f"{observed_label} {observed:+.3g}",
                        font={"size": 10, "color": st.ink})  # fmt: skip
     verdict = "reject H0" if p < alpha else "cannot reject H0"
     fig.add_annotation(
         xref="paper", x=1, xanchor="right", yref="paper", y=1, yanchor="bottom", showarrow=False, align="right",
         text=f"p = {p:.3g} ({tail}), α = {alpha:g}<br>{verdict}", font={"size": 11, "color": st.ink_2, "family": st.mono},
     )  # fmt: skip
+    sides = "two-sided" if tail == "two-sided" else "one-sided"
     return finish(
         fig,
         title,
-        subtitle,
+        subtitle or f"{n} replicates · shaded = the {sides} {alpha:.0%} rejection region",
         xlabel=xlabel,
         ylabel="density",
         height=height,

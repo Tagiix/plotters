@@ -216,6 +216,20 @@ def test_scatter_hover_is_closest_point():
     assert pl.plot_shaded_scatter(_pairs(20), "x", "y", "s").layout.hovermode == "closest"
 
 
-def test_log_shade_reference_must_be_positive():
-    with pytest.raises(ValueError, match="log_shade"):
-        pl.plot_shaded_scatter(_pairs(20), "x", "y", "s", log_shade=True, reference=0.0)
+def test_reference_outside_the_data_falls_back_to_sequential():
+    seq = pl.plot_shaded_scatter(_pairs(50), "x", "y", "s").data[0].marker
+    for kw in ({"reference": 0.0}, {"reference": 0.0, "log_shade": True}):
+        m = pl.plot_shaded_scatter(_pairs(50), "x", "y", "s", **kw).data[0].marker
+        assert m.colorscale == seq.colorscale  # not diverging: all values sit on one side
+    div = pl.plot_shaded_scatter(_pairs(50), "x", "y", "s", reference=1.0).data[0].marker
+    assert div.colorscale != seq.colorscale
+
+
+def test_shade_clip_ignores_outliers_and_is_validated():
+    frame = _pairs(200)
+    frame.loc[0, "s"] = 1000.0
+    clipped = pl.plot_shaded_scatter(frame, "x", "y", "s").data[0].marker
+    full = pl.plot_shaded_scatter(frame, "x", "y", "s", clip=0).data[0].marker
+    assert clipped.cmax < 10 < full.cmax
+    with pytest.raises(ValueError, match="clip"):
+        pl.plot_shaded_scatter(frame, "x", "y", "s", clip=0.6)

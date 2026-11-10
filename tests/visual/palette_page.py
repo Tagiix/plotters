@@ -37,11 +37,12 @@ def _delta_table(colors: list[str]) -> str:
 
 def _identity_figure() -> go.Figure:
     fig = go.Figure()
-    for i in range(8):
-        dash, width = pl.line_style(i + 8)
+    n = len(pl.palette())
+    for i in range(n):
+        dash, width = pl.line_style(i + n)
         fig.add_scatter(
             x=[0, 1],
-            y=[8 - i, 8 - i],
+            y=[n - i, n - i],
             mode="lines",
             showlegend=False,
             line={"color": pl.color(i), "dash": dash, "width": width},
@@ -50,7 +51,7 @@ def _identity_figure() -> go.Figure:
         m = pl.marker(i, size=11)
         fig.add_scatter(
             x=[2 + (i % 8)],
-            y=[8 - (i // 8) * 2.4 - 0.5],
+            y=[n - (i // 8) * 2.4 - 0.5],
             mode="markers",
             showlegend=False,
             marker={**m, "line": {"width": 2, "color": m["color"]}},
@@ -60,7 +61,7 @@ def _identity_figure() -> go.Figure:
     return pl.finish(
         fig,
         "Identity channels",
-        "Left: slots 8-15 are dashed. Right: 24 markers, fill changes only after 64",
+        f"Left: slots {n}-{2 * n - 1} are dashed. Right: 24 markers, fill changes only after {8 * n}",
         height=300,
         legend=False,
     )
@@ -69,7 +70,8 @@ def _identity_figure() -> go.Figure:
 def render(dark: bool) -> str:
     with pl.use_style(dark=dark) as st:
         cats = list(st.categorical)
-        names = ["blue", "rust", "cyan", "crimson", "amber", "lavender", "green", "olive"]
+        names = ["blue", "rust", "cyan", "crimson", "amber", "lavender", "green", "olive", "purple",
+                 "khaki", "teal", "brown", "rose", "forest", "clay"]  # fmt: skip
         sim = "".join(
             f'<div class="simrow"><span>{d}</span>{_swatches([c.simulate(x, d) for x in cats], names)}</div>'
             for d in c.DEFICIENCIES
@@ -94,7 +96,7 @@ def render(dark: bool) -> str:
 def page_section() -> str:
     return (
         '<section id="palette"><h2>Palette</h2>'
-        '<p class="checks">What you should see: eight hues that stay apart in every simulated row; '
+        '<p class="checks">What you should see: neighbouring hues stay apart in every simulated row (the first eight are the original set; slots 9-15 only extend it); '
         "sequential is monotonic light-to-dark (reversed in dark mode); diverging has a grey "
         "midpoint (dark in dark mode); no rainbow.</p>"
         f'<div class="pair">{render(False)}{render(True)}</div></section>'

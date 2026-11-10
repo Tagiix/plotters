@@ -110,7 +110,7 @@ def use_print_style() -> None:
             "grid.color": st.grid,
             "grid.linewidth": 0.6,
             "axes.axisbelow": True,
-            "axes.prop_cycle": cycler(color=list(st.categorical)),
+            "axes.prop_cycle": cycler(color=list(_style.palette())),
             "legend.frameon": False,
             "figure.dpi": 100,
             "savefig.dpi": 300,
@@ -237,7 +237,6 @@ def plot_lines(
         figsize: Size in inches; default :func:`figure_size`.
     """
     frames = pick(as_series_dict(data, _caller="plot_lines"), series)
-    st = _style.get_style()
     figure, ax = plt.subplots(figsize=figsize or figure_size())
     ends = []
     for i, (name, s) in enumerate(frames.items()):
@@ -245,9 +244,7 @@ def plot_lines(
         pattern = (
             _DASHES[_style._DASHES.index(dash) % len(_DASHES)] if dash != "solid" else (None, None)
         )
-        line, *_ = ax.plot(
-            s.index, s.to_numpy(), color=st.categorical[i % len(st.categorical)], label=str(name)
-        )
+        line, *_ = ax.plot(s.index, s.to_numpy(), color=_style.color(i), label=str(name))
         if pattern[0] is not None:
             line.set_dashes(pattern)
         valid = s.dropna()
@@ -320,7 +317,7 @@ def plot_points(
     gcol = _one_column(frame, group).astype(str).to_numpy() if group else np.full(len(frame), "")
     for i, g in enumerate(pd.unique(gcol)):
         m = gcol == g
-        ax.scatter(xs[m], ys[m], s=28, marker=_MARKERS[i % len(_MARKERS)], color=st.categorical[i % 8],
+        ax.scatter(xs[m], ys[m], s=28, marker=_MARKERS[i % len(_MARKERS)], color=_style.color(i),
                    label=g or None, zorder=3)  # fmt: skip
     if label:
         for xv, yv, t in zip(xs, ys, _one_column(frame, label).astype(str), strict=True):
@@ -469,7 +466,7 @@ def plot_function(
     xs = np.asarray(x, dtype=float)
     figure, ax = plt.subplots(figsize=figsize or figure_size())
     for i, (name, fn) in enumerate(functions.items()):
-        line, *_ = ax.plot(xs, fn(xs), color=st.categorical[i % 8], label=name)
+        line, *_ = ax.plot(xs, fn(xs), color=_style.color(i), label=name)
         pattern = _DASHES[i % len(_DASHES)]
         if pattern[0] is not None:
             line.set_dashes(pattern)
@@ -555,7 +552,7 @@ def plot_panels(
         for i, (label, s) in enumerate(group.items()):
             dash, _ = _style.line_style(i, vary_dash=vary_dash)
             line, *_ = ax.plot(
-                s.index, s.to_numpy(), color=st.categorical[i % 8], label=str(label), lw=1.3
+                s.index, s.to_numpy(), color=_style.color(i), label=str(label), lw=1.3
             )
             pattern = (
                 _DASHES[_style._DASHES.index(dash) % len(_DASHES)]

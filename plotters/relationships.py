@@ -159,6 +159,7 @@ def plot_shaded_scatter(
     size: str | None = None,
     log_shade: bool = False,
     reference: float | None = None,
+    clip: float = 0.01,
     logx: bool = False,
     logy: bool = False,
     xlabel: str | None = None,
@@ -184,8 +185,14 @@ def plot_shaded_scatter(
             variables (x, y, colour and size).
         log_shade: Colour by ``log10(shade)`` for a geometric ratio (needs positive values);
             the colourbar is still labelled in data units.
-        reference: A shade value that is "neutral" (such as 1.0 for a ratio). Switches to the
-            diverging ramp centred on it, symmetric in log space when ``log_shade``.
+        reference: A shade value that is "neutral" (such as 1.0 for a ratio, 0 for a gain). Uses
+            the diverging ramp centred on it, symmetric in log space when ``log_shade``, but only
+            when the data lie on both sides of it; otherwise (all values above, or a reference
+            that is not positive under ``log_shade``) the sequential ramp is used, since a
+            diverging ramp would paint every point the same colour.
+        clip: Fraction of the shade values ignored at each end when setting the colour range, so
+            a few outliers do not squash the gradient for everyone else (they take the end
+            colour). ``0`` uses the full range.
         logx: Logarithmic x axis.
         logy: Logarithmic y axis.
         xlabel: X axis title; defaults to the column name.
@@ -194,8 +201,8 @@ def plot_shaded_scatter(
         width: Figure width in px; ``None`` fills the container.
 
     Raises:
-        ValueError: ``shade`` is not numeric, or ``log_shade`` / ``reference`` with non-positive
-            values.
+        ValueError: ``shade`` is not numeric, ``log_shade`` with non-positive values, or ``clip``
+            outside [0, 0.5).
     """
     caller = "plot_shaded_scatter"
     _require_columns(frame, caller, x=x, y=y, shade=shade, label=label, size=size)
@@ -204,13 +211,16 @@ def plot_shaded_scatter(
         _numeric(frame, y, caller),
         _numeric(frame, shade, caller),
     )
+    if not 0 <= clip < 0.5:
+        raise ValueError(f"{caller}: clip must be in [0, 0.5), got {clip}")
     st = _style.get_style()
     values = sh
     if log_shade:
         if (sh[np.isfinite(sh)] <= 0).any():
             raise ValueError(f"{caller}: log_shade needs strictly positive shade values")
         values = np.log10(sh)
-    cmin, cmax = float(np.nanmin(values)), float(np.nanmax(values))
+    finite = values[np.isfinite(values)]
+    cmin, cmax = (float(v) for v in np.quantile(finite, [clip, 1 - clip], method="inverted_cdf"))
     marker: dict[str, object] = {
         "size": _bubble_sizes(_numeric(frame, size, caller), caller, size)
         if size
@@ -218,16 +228,13 @@ def plot_shaded_scatter(
         "color": values,
         "line": {"width": 0.6, "color": st.surface},
     }
-    if reference is not None:
-        if log_shade and reference <= 0:
-            raise ValueError(
-                f"{caller}: reference={reference:g} cannot centre a log_shade colour scale "
-                "(log of a non-positive number); use a positive reference such as 1.0 for a ratio"
-            )
+    center = None
+    if reference is not None and (reference > 0 or not log_shade):
         center = math.log10(reference) if log_shade else reference
-        span = max(abs(cmin - center), abs(cmax - center)) or 1.0
+    if center is not None and cmin < center < cmax:
+        span = max(center - cmin, cmax - center)
         marker.update(colorscale=_style.diverging_scale(), cmin=center - span, cmax=center + span)
-    else:
+    else:  # no neutral point inside the data: a diverging ramp would paint everything one colour
         marker.update(
             colorscale=_style.sequential_scale(), cmin=cmin, cmax=cmax if cmax > cmin else cmin + 1
         )

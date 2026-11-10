@@ -288,7 +288,7 @@ def plot_box_series(
         y: Column with the observations.
         title: Figure title.
         subtitle: Muted line under the title.
-        group: Column splitting the observations into curves (at most 8, one per colour).
+        group: Column splitting the observations into curves (at most 8).
         label: Column shown on hover for each observation.
         points: Show every observation next to its box.
         xlabel: X axis title; defaults to the column name.
@@ -305,9 +305,7 @@ def plot_box_series(
     ys = _numeric(frame, y, caller)
     names = list(pd.unique(_one_column(frame, group).astype(str))) if group else [""]
     if len(names) > MAX_SERIES:
-        raise ValueError(
-            f"{caller}: group={group!r} has {len(names)} values; at most {MAX_SERIES} (one per colour)"
-        )
+        raise ValueError(f"{caller}: group={group!r} has {len(names)} values; at most {MAX_SERIES}")
     positions = np.unique(xs[np.isfinite(xs)])
     gap = float(np.min(np.diff(positions))) if positions.size > 1 else 1.0
     box_width = gap * 0.8 / len(names)

@@ -89,10 +89,24 @@ def test_percent_logy_and_refusal_on_non_positive(wide):
     assert pl.plot_series(wide + 1, "t", logy=True).layout.yaxis.type == "log"
 
 
-def test_cap_on_other_line_charts():
-    many = pd.DataFrame({f"s{i}": np.arange(5.0) for i in range(9)})
+def test_cap_on_stacked_and_bars_with_line_only():
+    many = pd.DataFrame({f"s{i}": np.arange(1.0, 6.0) for i in range(9)})
     with pytest.raises(ValueError, match="plot_series"):
-        pl.plot_cumulative(many)
+        pl.plot_stacked(many)
+
+
+def test_cumulative_drawdown_rolling_have_no_cap_and_start_drawn_up_to_drawn():
+    many = pd.DataFrame({f"s{i}": np.linspace(0, 0.1, 30) for i in range(25)})
+    for fig in (
+        pl.plot_cumulative(many),
+        pl.plot_drawdown(many),
+        pl.plot_rolling(many, 5),
+    ):
+        flags = [t.visible for t in fig.data if t.showlegend is not False]
+        assert flags.count(True) == 20 and flags.count("legendonly") == 5
+    assert [t.visible for t in pl.plot_cumulative(many, drawn=3).data].count(True) == 3
+    with pytest.raises(ValueError, match="drawn"):
+        pl.plot_drawdown(many, drawn=-1)
 
 
 def test_cumulative_compound_vs_sum():

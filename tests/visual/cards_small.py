@@ -111,6 +111,43 @@ def sm_shaded_many_labels():
 
 
 @card(
+    "Relationships",
+    "plot_shaded_scatter: reference outside the data",
+    [
+        "All shade values are positive but reference=0.0: no neutral point inside the data, so the sequential ramp is used and the points are not all one colour.",
+        "A few extreme values take the end colour (clip=0.01) instead of squashing the gradient.",
+    ],
+)
+def sm_shaded_reference_outside():
+    rng = np.random.default_rng(8)
+    t = pd.DataFrame(
+        {
+            "x": rng.uniform(0.3, 0.8, 600),
+            "y": rng.normal(0, 8, 600),
+            "loss": np.r_[rng.uniform(0.4, 0.7, 596), [3.0, 3.5, 4.0, 5.0]],
+        }
+    )
+    return pl.plot_shaded_scatter(
+        t, "x", "y", "loss", "Positive shade, reference=0", reference=0.0, logx=True
+    )
+
+
+@card(
+    "Time series",
+    "plot_cumulative: 25 series",
+    [
+        "No series cap: the first 20 start drawn, the other 5 are greyed out in the legend, one click to add.",
+        "15 colours before a colour repeats; the repeats change dash.",
+    ],
+)
+def sm_cumulative_many():
+    rng = np.random.default_rng(3)
+    idx = pd.date_range("2022-01-01", periods=250)
+    data = pd.DataFrame(rng.normal(0.0004, 0.01, (250, 25)), index=idx).add_prefix("s")
+    return pl.plot_cumulative(data, "25 cumulative curves", compound=True)
+
+
+@card(
     "Time series",
     "plot_series: isolated points",
     [

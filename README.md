@@ -82,7 +82,7 @@ The build backend (hatchling) writes a plain static path for editable installs, 
 
 ## Getting started
 
-**Theme.** `set_style(dark=False)` chooses the palette and installs a plotly template, so even a plain `go.Figure()` created afterwards gets the fonts, colours and grid. `use_style(dark=True)` is a context manager that restores the previous theme. `set_style("auto")` reads the `PLOTTERS_STYLE` environment variable.
+**Theme.** `set_style(dark=False)` chooses the palette and installs a plotly template (`colors=` picks how many of the 15 categorical colours to cycle through, from 8 to 15), so even a plain `go.Figure()` created afterwards gets the fonts, colours and grid. `use_style(dark=True)` is a context manager that restores the previous theme. `set_style("auto")` reads the `PLOTTERS_STYLE` environment variable.
 
 **Showing figures.** These functions return a Figure and draw nothing, so Jupyter renders only the **last expression in a cell**. Three ways around it:
 
@@ -202,10 +202,10 @@ One section per module. Everything is imported from `plotters` directly (`pl.plo
 |---|---|
 | `plot_series` | One line per series: the workhorse. `percent`, `logy`, `logx`, `slider`, `range_buttons`, `fill`, `step`, `bands` (horizontal reference lines), `markers` (vertical lines), `spans` (shaded bands such as a recession or outage), `views` (dropdown over named subsets), `drawn` |
 | `plot_bars_with_line` | Realised as bars, prediction as lines on one axis. Did it track or lag? |
-| `plot_cumulative` | Wealth curve from per-period values; `compound=True` for reinvested |
-| `plot_drawdown` | Drop from the running peak, filled because the area *is* the quantity |
+| `plot_cumulative` | Wealth curve from per-period values; `compound=True` for reinvested; `drawn` |
+| `plot_drawdown` | Drop from the running peak, filled because the area *is* the quantity; `drawn` |
 | `plot_stacked` | Parts of a whole; refuses negative parts; `normalize=True` for shares |
-| `plot_rolling` | A rolling statistic over the raw series in lighter ink |
+| `plot_rolling` | A rolling statistic over the raw series in lighter ink; `drawn` |
 | `plot_line_band` | A line with an uncertainty ribbon |
 | `plot_calendar_heatmap` | A daily series as a weekday-by-week grid |
 
@@ -384,7 +384,7 @@ What changes for print: `vary_dash` defaults ON (no legend to click, and four so
 
 ## Theme details
 
-- **Eight categorical hues**, ordered so neighbours stay apart under colour-vision deficiencies. Measured with CIEDE2000 on protan, deutan and tritan simulations (including the wrap from slot 8 back to slot 1): worst adjacent ΔE is **15.6 light / 17.3 dark** against a floor of 8, and the worst pair for normal vision is **26.3** against a floor of 15. `tests/unit/test_palette.py` enforces it: **re-order or edit a slot and you must re-validate.**
+- **Fifteen categorical hues** (the first eight are the original set), ordered so neighbours stay apart under colour-vision deficiencies. Measured with CIEDE2000 on protan, deutan and tritan simulations, including the wrap from the last slot back to slot 1 at every size from 8 to 15: worst adjacent ΔE is **9.2 light / 10.0 dark** against a floor of 8, and the worst pair for normal vision is **16.2 / 16.0** against a floor of 15. The margin is thinner than with eight hues; `set_style(colors=10)` keeps just the first ten (each size is validated). `tests/unit/test_palette.py` enforces it: **re-order or edit a slot and you must re-validate.**
 - **Using the theme in your own traces.** `color(i)` / `palette()` give the categorical colours, `get_style()` the full set of tokens (surface, inks, grid, ramps), and `sequential_scale()` / `diverging_scale()` plotly colourscales for heatmaps and marker colours.
 - **Spelling.** The canonical names are American (`color`, `normalize_series`, `normalize_within`, `center=`); `colour`, `normalise_series` and `normalise_within` are exported as aliases.
 - **Sequential** is one hue, pale to deep (reversed in dark mode so "more" stays salient). **Diverging** is two poles with a neutral grey midpoint (dark in dark mode). Never a rainbow.
@@ -395,7 +395,7 @@ What changes for print: `vary_dash` defaults ON (no legend to click, and four so
 The library refuses rather than draw something misleading.
 
 - **One y axis, always.** There is no dual-axis option. Two measures of different scale get two charts (`plot_small_multiples`, `plot_grid`), or indexing to a common base.
-- **Series caps differ by form, deliberately.** `plot_series`: unlimited, 20 visible. Other line charts: 8 (`MAX_SERIES`, one per colour). Scatter and facets: 3 (`MAX_ALL_PAIRS`). Coloured by rank or value, and ACF panels: none. `MAX_ALL_PAIRS` is a constant, not `len(palette)`, so growing the palette cannot silently raise the scatter cap.
+- **Series caps differ by form, deliberately.** `plot_series`: unlimited, 20 visible. `plot_cumulative`, `plot_drawdown` and `plot_rolling` follow it (`drawn=`). Other line charts (`plot_stacked`, `plot_line_band`, `plot_bars_with_line`, the model-comparison curves): 8 (`MAX_SERIES`). Scatter and facets: 3 (`MAX_ALL_PAIRS`). Coloured by rank or value, and ACF panels: none. `MAX_ALL_PAIRS` is a constant, not `len(palette)`, so growing the palette cannot silently raise the scatter cap.
 - **No violin.** A KDE over ~12 points draws density that is not in the data. `plot_box(points=True)` is the honest form below a few hundred observations per group.
 - **No pie.** `plot_bars(normalize=True)` shows the same shares readably.
 - **Area, not diameter**, carries a bubble's value; **log axes** get readable ticks; **luminance**, not position, decides cell ink.
