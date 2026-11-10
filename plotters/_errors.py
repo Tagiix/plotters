@@ -17,6 +17,7 @@ _HINTS = {
     "B": "a long (tidy) DataFrame followed by column-name strings (x=, y=, ...)",
     "C": "two positional series: bars (a Series) and line (Series or dict)",
     "D": "a wide/square DataFrame whose rows and columns are the two axes",
+    "E": "a {label: number} dict or a Series indexed by label (value_counts() output works)",
 }
 
 

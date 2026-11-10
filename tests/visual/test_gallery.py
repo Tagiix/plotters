@@ -5,7 +5,14 @@ import pytest
 
 import plotters as pl
 
-from . import cards_analysis, cards_comparisons, cards_core, cards_distributions, cards_matrices  # noqa: F401  (registers the cards)
+from . import (  # noqa: F401  (registers the cards)
+    cards_analysis,
+    cards_categorical,
+    cards_comparisons,
+    cards_core,
+    cards_distributions,
+    cards_matrices,
+)
 from .registry import CARDS
 
 

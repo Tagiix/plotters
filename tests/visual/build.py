@@ -11,7 +11,14 @@ from plotly.offline import get_plotlyjs
 
 import plotters as pl
 
-from . import cards_analysis, cards_comparisons, cards_core, cards_distributions, cards_matrices  # noqa: F401  (registers cards)
+from . import (  # noqa: F401  (registers cards)
+    cards_analysis,
+    cards_categorical,
+    cards_comparisons,
+    cards_core,
+    cards_distributions,
+    cards_matrices,
+)
 from .palette_page import page_section
 from .registry import CARDS, Card
 

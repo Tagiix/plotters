@@ -24,6 +24,7 @@ __all__ = [
     "normalise_within",
     "group_by_prefix",
     "label_from",
+    "as_value_series",
 ]
 
 
@@ -63,6 +64,34 @@ def as_series_dict(
             out[str(key)] = val
         return out
     raise convention_error(_caller, "A", data)
+
+
+def as_value_series(data: Mapping[str, float] | pd.Series, name: str = "value") -> pd.Series:
+    """Normalise convention-E input (label to number) to a float Series indexed by ``str`` labels.
+
+    Args:
+        data: A ``{label: number}`` dict, or a Series indexed by label (for instance the result of
+            ``value_counts()``).
+        name: Name given to the resulting Series.
+
+    Raises:
+        ConventionError: ``data`` is neither a Series nor a mapping (a DataFrame is refused too:
+            it is a table, not a label-to-number mapping).
+        ValueError: a value is not numeric.
+    """
+    if isinstance(data, pd.Series):
+        series = data.copy()
+    elif isinstance(data, Mapping):
+        series = pd.Series(dict(data))
+    else:
+        raise convention_error("this plotter", "E", data)
+    try:
+        series = series.astype(float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("label-to-number input must have numeric values") from exc
+    series.index = series.index.map(str)
+    series.name = name if series.name is None else str(series.name)
+    return series
 
 
 def pick(

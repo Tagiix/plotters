@@ -9,6 +9,18 @@ from importlib.metadata import PackageNotFoundError, version
 from ._errors import ConventionError
 from ._types import MAX_ALL_PAIRS, MAX_SERIES, MAX_VISIBLE, SeriesLike
 from .analysis import analyze_series, compare_series, plot_series_distribution
+from .categorical import (
+    plot_bars,
+    plot_calendar_heatmap,
+    plot_counts,
+    plot_dumbbell,
+    plot_grouped_bars,
+    plot_line_band,
+    plot_lollipop,
+    plot_regression,
+    plot_scatter_matrix,
+    plot_waterfall,
+)
 from .comparisons import (
     plot_box_series,
     plot_interval,
@@ -31,6 +43,7 @@ from .distributions import (
 )
 from .frames import (
     as_series_dict,
+    as_value_series,
     group_by_prefix,
     group_values,
     label_from,
@@ -80,6 +93,17 @@ except PackageNotFoundError:  # running from a source tree that is not installed
     __version__ = "0.0.0"
 
 __all__ = [
+    "plot_bars",
+    "plot_calendar_heatmap",
+    "plot_counts",
+    "plot_dumbbell",
+    "plot_grouped_bars",
+    "plot_line_band",
+    "plot_lollipop",
+    "plot_regression",
+    "plot_scatter_matrix",
+    "plot_waterfall",
+    "as_value_series",
     "plot_box_series",
     "plot_interval",
     "plot_paired_difference",
