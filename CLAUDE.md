@@ -12,7 +12,7 @@ Context for Claude Code (and any contributor) working in this repository. Read i
 uv venv && uv pip install -e ".[dev]"            # dev environment (hatchling; static editable path, Pylance-friendly)
 .venv/bin/ruff check .  &&  .venv/bin/ruff format plotters tests examples
 .venv/bin/pyright                                 # typeCheckingMode = "basic"; must report 0 errors
-.venv/bin/python -m pytest -q                     # 648 tests, ~12 s
+.venv/bin/python -m pytest -q                     # 662 tests, ~16 s
 .venv/bin/python -m tests.visual [substring]      # gallery/index.html, or gallery/only.html for matching cards
 uv build                                          # wheel + sdist into dist/ (both git-ignored)
 scripts/install-into.sh <venv-dir>...             # editable install of this checkout into other venvs
@@ -20,9 +20,9 @@ scripts/install-into.sh <venv-dir>...             # editable install of this che
 
 **Definition of done for any change:** ruff clean, pyright 0 errors, pytest green, gallery rebuilt, and (for anything visual) the rendered output actually looked at. CI (`.github/workflows/ci.yml`) runs lint, pyright, pytest and the gallery on Python 3.10, 3.11, 3.12 and 3.13 with `fail-fast: false`. After pushing, watch it with `gh run watch <id> --exit-status`; do not assume.
 
-## Snapshot (v0.1.0, 2026-11-10)
+## Snapshot (v0.1.0, 2026-11-11)
 
-119 exports (111 functions), 63 plotly plotters (`plot_*`) + 10 matplotlib print functions in `plotters.static`, 648 tests, 125 gallery cards. 15 categorical colours (8 original + 7 searched; `set_style(colors=8..15)`): worst adjacent colour-blind ΔE 9.2 light / 10.0 dark over all sizes (floor 8), worst normal-vision pair 16.2 / 16.0 (floor 15). Verified on Python 3.10, 3.12, 3.15.
+119 exports (111 functions), 63 plotly plotters (`plot_*`) + 10 matplotlib print functions in `plotters.static`, 662 tests, 125 gallery cards. 15 categorical colours (8 original + 7 searched; `set_style(colors=8..15)`): worst adjacent colour-blind ΔE 9.2 light / 10.0 dark over all sizes (floor 8), worst normal-vision pair 16.2 / 16.0 (floor 15). Verified on Python 3.10, 3.12, 3.15.
 
 ## Recent behaviour decisions (2026-11-10)
 
@@ -31,6 +31,9 @@ scripts/install-into.sh <venv-dir>...             # editable install of this che
 - `plot_tradeoff(frontier=True)`: `False` hides the Pareto line and rings (matches `static.plot_points(frontier=)`). A tradeoff/scatter `group=` gets a distinct colour *and* shape (`marker(f)`), `label=` is written once per distinct value (`_label_once`) and always on hover.
 - `plot_null_test`: `observed_label=`, rejection region as full-height bands with dotted cut lines.
 - **No colour-count caps anywhere** (the user's call: a drawn chart with repeating colours beats a refusal, and plotly's zoom/hover/`label=` do the rest). The `MAX_ALL_PAIRS` and the 8-series refusals are gone; `MAX_SERIES` survives only as the views-baseline rule in `plot_series(views=)`. `label=` is written once per distinct value (`_label_once`, on the point nearest the centroid) and always on hover; scatter/tradeoff groups get a distinct colour *and* shape (`marker(f)`).
+
+- 2026-11-11: `analyze_series` returns the full statistics table by default with **readable column titles** (`P(|z| > 1)`, `Top 1% squared share`, ...; `readable_columns=False` for code names) and the old result keys; `series_statistics` has the tail/energy/acf/rolling options; quantile columns are `q01 q05 q50 q95 q99`. `plot_tradeoff(rings=, label_text=)` and `hovermode="closest"`; `plot_null_test(normal_reference=)`. **Column titles shown to the user must be self-explanatory, never a bare code name.**
+- The user tries changes by **copying files or pulling**: always commit + push, then list the files to copy and say to restart the kernel.
 
 ## Architecture
 

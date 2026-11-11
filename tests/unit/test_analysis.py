@@ -13,7 +13,7 @@ def frame():
 
 
 def test_analyze_series_returns_stats_and_five_figures(frame):
-    out = pl.analyze_series(frame, "T", bins=20)
+    out = pl.analyze_series(frame, "T", bins=20, readable_columns=False)
     assert list(out["figures"]) == [
         "values",
         "absolute",
@@ -26,7 +26,7 @@ def test_analyze_series_returns_stats_and_five_figures(frame):
 
 
 def test_pooled_distribution_stacks_every_observation(frame):
-    out = pl.analyze_series(frame)
+    out = pl.analyze_series(frame, readable_columns=False)
     stacked = np.concatenate([frame[c].to_numpy() for c in frame])
     assert out["stats"].loc["pooled", "mean"] == pytest.approx(stacked.mean())
     assert out["stats"].loc["pooled", "std"] == pytest.approx(stacked.std())
@@ -42,7 +42,7 @@ def test_pooled_path_averages_available_series_then_accumulates(frame):
 
 
 def test_absolute_paths_average_magnitudes_before_accumulating(frame):
-    out = pl.analyze_series(frame)
+    out = pl.analyze_series(frame, readable_columns=False)
     fig = out["figures"]["cumulative_absolute"]
     assert np.asarray(fig.data[0].y) == pytest.approx(frame.abs().mean(axis=1).cumsum().to_numpy())
 
@@ -54,7 +54,7 @@ def test_pooled_false_has_no_pooled_view(frame):
 
 
 def test_normalize_in_analysis_scales_each_series(frame):
-    out = pl.analyze_series(frame * np.array([1, 10, 100]), normalize="std")
+    out = pl.analyze_series(frame * np.array([1, 10, 100]), normalize="std", readable_columns=False)
     assert out["stats"].loc[["a", "b", "c"], "std"].to_numpy() == pytest.approx([1, 1, 1])
 
 
@@ -152,7 +152,7 @@ def test_analyze_series_accepts_the_notebook_call(frame):
     assert cum.layout.yaxis.title.text == "cumulative return (%)"
     assert out["figures"]["histogram"].layout.xaxis.title.text == "return (%)"
     assert "P(|z| > 3) / P(|z| > 1)" in out["stats"].columns
-    assert out["stats"]["turnover_ratio"].notna().all()
+    assert out["turnover_ratio"].notna().all()
 
 
 def test_null_test_normal_reference_legend():

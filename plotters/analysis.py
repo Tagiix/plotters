@@ -271,10 +271,31 @@ _READABLE: tuple[tuple[re.Pattern[str], Callable[[re.Match[str]], str]], ...] = 
 )
 
 
+_PLAIN = {
+    "n": "n (observations)",
+    "mean": "Mean",
+    "std": "Std (ddof=0)",
+    "rms": "RMS (root mean square)",
+    "mean_absolute": "Mean |x|",
+    "mean_over_std": "Mean / std",
+    "skewness": "Skewness",
+    "excess_kurtosis": "Excess kurtosis (0 = normal)",
+    "median": "Median",
+    "min": "Min",
+    "max": "Max",
+    "turnover_ratio": "Turnover ratio (mean |change| / mean |x|)",
+}
+
+
 def _readable_names(columns: Sequence[str]) -> dict[str, str]:
     """``{column: readable title}``: ``tail_probability_3rms`` becomes ``P(|z| > 3)``."""
-    out = {c: c for c in columns}
+    out = {c: _PLAIN.get(c, c) for c in columns}
     for column in columns:
+        if match := re.fullmatch(r"q(\d+)(?:_(\d+))?", column):
+            out[column] = (
+                f"{match[1].lstrip('0') or '0'}{'.' + match[2] if match[2] else ''}% quantile"
+            )
+            continue
         for pattern, title in _READABLE:
             if match := pattern.fullmatch(column):
                 out[column] = title(match)
