@@ -74,7 +74,8 @@ def series_turnover_ratio(series: pd.Series, *, group_level: int | str | None = 
 
 
 def _quantile_name(q: float) -> str:
-    return f"q{q * 100:g}".replace(".", "_")
+    pct = round(q * 100, 10)
+    return f"q{int(pct):02d}" if pct == int(pct) else f"q{pct:g}".replace(".", "_")
 
 
 def _tail_name(t: float) -> str:
@@ -95,6 +96,7 @@ def series_statistics(
     energy_fractions: Sequence[float] = (),
     acf_lags: Sequence[int] = (),
     rolling_window: int | None = None,
+    extreme_multiples: Sequence[float] = (),
     turnover: Callable[[pd.Series], float] | None = None,
 ) -> pd.DataFrame:
     """One row per series: moments, quantiles, tail frequencies and turnover.
@@ -105,7 +107,7 @@ def series_statistics(
     Args:
         data: Series, wide DataFrame or ``{label: Series}``.
         series: Subset and order of series.
-        quantiles: Quantile levels, one column each (``q1``, ``q5``, ``q50`` ...).
+        quantiles: Quantile levels, one column each (``q01``, ``q05``, ``q50``, ``q99``; ``q2_5`` for 2.5%).
         thresholds: Tail cut-offs. With ``tail_normalize=None`` they are **in the input's own
             units**: ``tail_<t>`` is the share of observations with ``|x| > t`` (``None`` uses 2
             and 3 standard deviations of each series: ``tail_2std``, ``tail_3std``). With
@@ -131,6 +133,9 @@ def series_statistics(
             retained finite rows, not calendar days.
         rolling_window: Window ``w``; adds ``rolling_rms_cv_<w>``, the standard deviation over
             the mean of the trailing-``w`` RMS.
+        extreme_multiples: Multiples ``k``; adds ``extreme_frequency_<k>rms``, the share of
+            observations whose absolute value exceeds ``k`` times their own RMS. Independent of
+            ``tail_normalize`` and ``tail_center``.
         turnover: Replaces :func:`series_turnover_ratio` in the ``turnover_ratio`` column; takes
             the series, returns a scalar.
 
@@ -176,6 +181,10 @@ def series_statistics(
             row[f"acf_{lag}"] = _acf_at(x, lag)
             row[f"abs_acf_{lag}"] = _acf_at(x.abs(), lag)
             row[f"squared_acf_{lag}"] = _acf_at(x**2, lag)
+        for k in extreme_multiples:
+            row[f"extreme_frequency_{k:g}rms"] = (
+                float((x.abs() > k * row["rms"]).mean()) if has else np.nan
+            )
         if rolling_window:
             row[f"rolling_rms_cv_{rolling_window}"] = _rolling_rms_cv(x, rolling_window)
         row["turnover_ratio"] = (

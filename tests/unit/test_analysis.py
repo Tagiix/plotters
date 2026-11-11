@@ -162,3 +162,17 @@ def test_null_test_normal_reference_legend():
     )  # fmt: skip
     names = [t.name for t in fig.data if t.name]
     assert names == ["Bootstrap null", "N(0, 1) reference", "observed (+0.583)"]
+
+
+def test_analyze_series_default_table_has_the_guide_columns(frame):
+    stats = pl.analyze_series(frame)["stats"]
+    expected = {"rms", "mean_absolute", "mean_over_std", "median", "q01", "q05", "q95", "q99"}
+    expected |= {f"tail_probability_{t}rms" for t in (1, 2, 3, 4)}
+    expected |= {f"tail_count_{t}rms" for t in (1, 2, 3, 4)}
+    expected |= {"tail_ratio_3rms_1rms", "squared_tail_share_1pct", "rolling_rms_cv_21"}
+    expected |= {f"{p}acf_{k}" for p in ("", "abs_", "squared_") for k in (1, 5, 21)}
+    expected |= {"extreme_frequency_3rms", "extreme_frequency_4rms"}
+    assert expected <= set(stats.columns)
+    assert stats.loc["pooled", "extreme_frequency_3rms"] == pytest.approx(
+        stats.loc["pooled", "tail_probability_3rms"]
+    )

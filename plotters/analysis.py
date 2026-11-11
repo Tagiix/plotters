@@ -261,9 +261,9 @@ def analyze_series(
     normalize: Literal["std", "rms"] | None = None,
     center: bool = False,
     cut: int = 0,
-    quantiles: Sequence[float] = (0.01, 0.5, 0.99),
+    quantiles: Sequence[float] = (0.01, 0.05, 0.5, 0.95, 0.99),
     display_stats: Sequence[str] = _DEFAULT_DISPLAY,
-    thresholds: Sequence[float] | None = None,
+    thresholds: Sequence[float] | None = (1, 2, 3, 4),
     metrics: Mapping[str, Callable[[pd.Series], float]] | None = None,
     reference_series: SeriesLike | None = None,
     reference_label: str = "reference",
@@ -271,12 +271,13 @@ def analyze_series(
     turnover_ratio: Callable[[pd.Series], float] | None = None,
     value_label: str = "",
     view_prefix: str = "",
-    tail_normalize: Literal["std", "rms"] | None = None,
+    tail_normalize: Literal["std", "rms"] | None = "rms",
     tail_center: bool = False,
-    tail_ratios: Sequence[tuple[float, float]] = (),
-    energy_fractions: Sequence[float] = (),
-    acf_lags: Sequence[int] = (),
-    rolling_window: int | None = None,
+    tail_ratios: Sequence[tuple[float, float]] = ((3, 1),),
+    energy_fractions: Sequence[float] = (0.01,),
+    acf_lags: Sequence[int] = (1, 5, 21),
+    rolling_window: int | None = 21,
+    extreme_multiples: Sequence[float] = (3, 4),
 ) -> dict[str, Any]:
     """Statistics and five figures for a set of series, in one call.
 
@@ -303,7 +304,8 @@ def analyze_series(
         cut: Leading rows to drop after sorting each input's index.
         quantiles: Quantile levels for the table and the histogram markers.
         display_stats: Statistics written on the histogram annotation.
-        thresholds: Tail cut-offs, see :func:`plotters.stats.series_statistics`.
+        thresholds: Tail cut-offs in units of ``tail_normalize`` (own RMS by default), see
+            :func:`plotters.stats.series_statistics`.
         metrics: ``{name: callable}`` extra scalar statistics.
         reference_series: Series, wide frame or ``{label: Series}`` of baselines **in the same units
             as the values** (no rescaling is applied), matched to the inputs by name; one series is
@@ -324,6 +326,14 @@ def analyze_series(
         energy_fractions: Adds ``squared_tail_share_<pct>pct`` columns.
         acf_lags: Adds ``acf_``, ``abs_acf_`` and ``squared_acf_`` columns at these lags.
         rolling_window: Adds ``rolling_rms_cv_<w>``.
+        extreme_multiples: Adds ``extreme_frequency_<k>rms`` (share beyond ``k`` times the own RMS).
+
+    The defaults give the table: ``n, mean, std, rms, mean_absolute, mean_over_std, skewness,
+    excess_kurtosis, median, min, max``, ``q01 q05 q50 q95 q99``,
+    ``tail_probability_{1,2,3,4}rms`` and ``tail_count_{1,2,3,4}rms`` (P(|z| > t) for z = x / own
+    RMS), ``tail_ratio_3rms_1rms``, ``squared_tail_share_1pct``, ``extreme_frequency_{3,4}rms``,
+    ``acf_`` / ``abs_acf_`` / ``squared_acf_`` at lags 1, 5, 21, ``rolling_rms_cv_21`` and
+    ``turnover_ratio``. Pass ``()`` / ``None`` to drop an optional group.
 
     Returns:
         ``{"data": {label: Series}, "stats": DataFrame, "figures": {name: Figure}}`` where
@@ -341,6 +351,7 @@ def analyze_series(
         "tail_center": tail_center,
         "tail_ratios": tail_ratios,
         "energy_fractions": energy_fractions,
+        "extreme_multiples": extreme_multiples,
     }
     stats = series_statistics(
         frames, quantiles=quantiles, thresholds=thresholds, metrics=metrics, turnover=turnover_ratio,
