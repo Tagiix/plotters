@@ -6,7 +6,9 @@ Use the individual functions in :mod:`plotters.stats` for one table, or
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
+from math import erfc, sqrt
 from typing import Any, Literal
 
 import numpy as np
@@ -171,11 +173,13 @@ def _prepare(
     normalize: Literal["std", "rms"] | None,
     center: bool,
     cut: int,
-) -> dict[str, pd.Series]:
+) -> tuple[dict[str, pd.Series], dict[str, Any]]:
     frames = pick(as_series_dict(data, _caller="analyze_series"), series)
+    info: dict[str, Any] = {"method": normalize, "center": center, "cut": cut}
     if normalize is None and not center and not cut:
-        return {str(n): s.astype(float) for n, s in frames.items()}
-    return normalize_series(frames, normalize, center=center, cut=cut).series
+        return {str(n): s.astype(float) for n, s in frames.items()}, info
+    done = normalize_series(frames, normalize, center=center, cut=cut)
+    return done.series, {**info, "means": done.means, "scales": done.scales}
 
 
 def _paths(frames: Mapping[str, pd.Series], pooled: bool) -> dict[str, dict[str, pd.Series]]:
@@ -250,6 +254,47 @@ def _prefix_views(fig: go.Figure, prefix: str) -> None:
     fig.update_layout(updatemenus=[menu])
 
 
+_READABLE: tuple[tuple[re.Pattern[str], Callable[[re.Match[str]], str]], ...] = (
+    (re.compile(r"tail_probability_([\d.]+)(?:rms|std)"), lambda m: f"P(|z| > {m[1]})"),
+    (re.compile(r"tail_count_([\d.]+)(?:rms|std)"), lambda m: f"n(|z| > {m[1]})"),
+    (
+        re.compile(r"tail_ratio_([\d.]+)(?:rms|std)?_([\d.]+)(?:rms|std)?"),
+        lambda m: f"P(|z| > {m[1]}) / P(|z| > {m[2]})",
+    ),
+    (re.compile(r"tail_([\d.]+)"), lambda m: f"P(|z| > {m[1]})"),
+    (re.compile(r"squared_tail_share_([\d.]+)pct"), lambda m: f"Top {m[1]}% squared share"),
+    (re.compile(r"extreme_frequency_([\d.]+)rms"), lambda m: f"P(|x| > {m[1]} rms)"),
+    (re.compile(r"acf_(\d+)"), lambda m: f"ACF lag {m[1]}"),
+    (re.compile(r"abs_acf_(\d+)"), lambda m: f"|x| ACF lag {m[1]}"),
+    (re.compile(r"squared_acf_(\d+)"), lambda m: f"x² ACF lag {m[1]}"),
+    (re.compile(r"rolling_rms_cv_(\d+)"), lambda m: f"Std / mean of {m[1]}-obs rolling RMS"),
+)
+
+
+def _readable_names(columns: Sequence[str]) -> dict[str, str]:
+    """``{column: readable title}``: ``tail_probability_3rms`` becomes ``P(|z| > 3)``."""
+    out = {c: c for c in columns}
+    for column in columns:
+        for pattern, title in _READABLE:
+            if match := pattern.fullmatch(column):
+                out[column] = title(match)
+                break
+    return out
+
+
+def _normal_tails(columns: Sequence[str], labels: Mapping[str, str]) -> tuple[pd.Series, pd.Series]:
+    """Tail probabilities and ratios of N(0, 1) for the thresholds the table holds."""
+    probs: dict[str, float] = {}
+    ratios: dict[str, float] = {}
+    for column in columns:
+        if m := re.fullmatch(r"tail_probability_([\d.]+)(?:rms|std)|tail_([\d.]+)", column):
+            probs[labels[column]] = erfc(float(m[1] or m[2]) / sqrt(2))
+        elif m := re.fullmatch(r"tail_ratio_([\d.]+)(?:rms|std)?_([\d.]+)(?:rms|std)?", column):
+            high, low = erfc(float(m[1]) / sqrt(2)), erfc(float(m[2]) / sqrt(2))
+            ratios[labels[column]] = high / low if low else float("nan")
+    return pd.Series(probs, dtype=float), pd.Series(ratios, dtype=float)
+
+
 def analyze_series(
     data: SeriesLike,
     title: str = "",
@@ -278,6 +323,7 @@ def analyze_series(
     acf_lags: Sequence[int] = (1, 5, 21),
     rolling_window: int | None = 21,
     extreme_multiples: Sequence[float] = (3, 4),
+    readable_columns: bool = True,
 ) -> dict[str, Any]:
     """Statistics and five figures for a set of series, in one call.
 
@@ -327,6 +373,11 @@ def analyze_series(
         acf_lags: Adds ``acf_``, ``abs_acf_`` and ``squared_acf_`` columns at these lags.
         rolling_window: Adds ``rolling_rms_cv_<w>``.
         extreme_multiples: Adds ``extreme_frequency_<k>rms`` (share beyond ``k`` times the own RMS).
+        readable_columns: Title the derived columns for reading: ``P(|z| > 1)``, ``n(|z| > 1)``,
+            ``P(|z| > 3) / P(|z| > 1)``, ``Top 1% squared share``, ``P(|x| > 3 rms)``,
+            ``ACF lag 5``, ``|x| ACF lag 5``, ``x² ACF lag 5``, ``Std / mean of 21-obs rolling RMS``. ``z`` is
+            the analysed value after ``normalize`` and divided by its own ``tail_normalize`` scale.
+            ``False`` keeps the code names (``tail_probability_1rms`` ...).
 
     The defaults give the table: ``n, mean, std, rms, mean_absolute, mean_over_std, skewness,
     excess_kurtosis, median, min, max``, ``q01 q05 q50 q95 q99``,
@@ -336,16 +387,22 @@ def analyze_series(
     ``turnover_ratio``. Pass ``()`` / ``None`` to drop an optional group.
 
     Returns:
-        ``{"data": {label: Series}, "stats": DataFrame, "figures": {name: Figure}}`` where
+        ``{"data": {label: Series}, "stats": DataFrame, "figures": {name: Figure}, ...}`` where
         the figures are ``values``, ``absolute``, ``cumulative``, ``cumulative_absolute`` and
-        ``histogram``.
+        ``histogram``. Also: ``tail_ratios``, ``tail_counts`` and ``energy_shares`` (those columns
+        of ``stats`` on their own), ``normal_tail_probabilities`` and ``normal_tail_ratios`` (N(0, 1)
+        values for the same thresholds, ``None`` unless ``normal_reference``), ``turnover_ratio``
+        (Series), ``pooled`` (the stacked finite sample, or ``None``), ``per_series`` (= ``data``,
+        also ``per_ticker``), ``histories`` (``{label: {series, absolute, cumsum,
+        absolute_cumsum}}``), ``normalization``, ``n_series`` / ``n_tickers`` (series available at
+        each index value), ``skipped_series`` and ``pooling`` (what pooled means).
 
     Example:
         >>> out = pl.analyze_series(returns, bins=100, normalize="std")
         >>> out["stats"]
         >>> pl.show_all(out["figures"])
     """
-    frames = _prepare(data, series, normalize, center, cut)
+    frames, normalization = _prepare(data, series, normalize, center, cut)
     tail = {
         "tail_normalize": tail_normalize,
         "tail_center": tail_center,
@@ -406,7 +463,53 @@ def analyze_series(
             _prefix_views(fig, view_prefix)
     first = [c for c in ("n", *display_stats) if c in stats.columns]
     stats = stats[[*first, *[c for c in stats.columns if c not in first]]]
-    return {"data": frames, "stats": stats, "figures": figures}
+    labels = (
+        _readable_names(list(stats.columns)) if readable_columns else {c: c for c in stats.columns}
+    )
+    table = stats.rename(columns=labels)
+
+    def part(prefix: str) -> pd.DataFrame:
+        return table[[labels[c] for c in stats.columns if c.startswith(prefix)]].copy()
+
+    normal_p, normal_r = (
+        _normal_tails(list(stats.columns), labels) if normal_reference else (None, None)
+    )
+    aligned = pd.concat(frames, axis=1).sort_index()
+    present = aligned.notna().sum(axis=1)
+    return {
+        "data": frames,
+        "stats": table,
+        "figures": figures,
+        "tail_ratios": part("tail_ratio_"),
+        "tail_counts": part("tail_count_"),
+        "energy_shares": part("squared_tail_share_"),
+        "normal_tail_probabilities": normal_p,
+        "normal_tail_ratios": normal_r,
+        "turnover_ratio": stats["turnover_ratio"].copy(),
+        "pooled": pd.concat(list(frames.values()), ignore_index=True).dropna() if pooled else None,
+        "per_series": frames,
+        "per_ticker": frames,
+        "histories": {
+            n: {
+                "series": paths["values"][n],
+                "absolute": paths["absolute"][n],
+                "cumsum": paths["cumulative"][n],
+                "absolute_cumsum": paths["cumulative_absolute"][n],
+            }
+            for n in names
+        },
+        "normalization": normalization,
+        "n_series": present.rename("n_series"),
+        "n_tickers": present.rename("n_tickers"),
+        "skipped_series": [],
+        "pooling": {
+            "enabled": pooled,
+            "distribution": "All observations weighted equally per observation",
+            "time_series": "Mean over available series at each index value",
+            "absolute_time_series": "Mean of absolute values before accumulation",
+            "turnover_ratio": "Default: mean within-series absolute change / mean absolute level",
+        },
+    }
 
 
 def compare_series(

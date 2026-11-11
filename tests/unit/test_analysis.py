@@ -151,7 +151,7 @@ def test_analyze_series_accepts_the_notebook_call(frame):
     assert all(b.label.startswith("Ticker: ") for b in cum.layout.updatemenus[0].buttons)
     assert cum.layout.yaxis.title.text == "cumulative return (%)"
     assert out["figures"]["histogram"].layout.xaxis.title.text == "return (%)"
-    assert "tail_ratio_3rms_1rms" in out["stats"].columns
+    assert "P(|z| > 3) / P(|z| > 1)" in out["stats"].columns
     assert out["stats"]["turnover_ratio"].notna().all()
 
 
@@ -165,7 +165,7 @@ def test_null_test_normal_reference_legend():
 
 
 def test_analyze_series_default_table_has_the_guide_columns(frame):
-    stats = pl.analyze_series(frame)["stats"]
+    stats = pl.analyze_series(frame, readable_columns=False)["stats"]
     expected = {"rms", "mean_absolute", "mean_over_std", "median", "q01", "q05", "q95", "q99"}
     expected |= {f"tail_probability_{t}rms" for t in (1, 2, 3, 4)}
     expected |= {f"tail_count_{t}rms" for t in (1, 2, 3, 4)}
@@ -176,3 +176,23 @@ def test_analyze_series_default_table_has_the_guide_columns(frame):
     assert stats.loc["pooled", "extreme_frequency_3rms"] == pytest.approx(
         stats.loc["pooled", "tail_probability_3rms"]
     )
+
+
+def test_analyze_series_readable_titles_and_extra_keys(frame):
+    out = pl.analyze_series(frame, normal_reference=True)
+    cols = set(out["stats"].columns)
+    assert {"P(|z| > 1)", "n(|z| > 4)", "P(|z| > 3) / P(|z| > 1)", "Top 1% squared share"} <= cols
+    assert {
+        "ACF lag 5",
+        "|x| ACF lag 21",
+        "x² ACF lag 1",
+        "Std / mean of 21-obs rolling RMS",
+    } <= cols
+    assert list(out["tail_ratios"].columns) == ["P(|z| > 3) / P(|z| > 1)"]
+    assert list(out["tail_counts"].columns) == [f"n(|z| > {t})" for t in (1, 2, 3, 4)]
+    assert out["normal_tail_probabilities"]["P(|z| > 1)"] == pytest.approx(0.3173105, abs=1e-6)
+    assert out["normal_tail_ratios"]["P(|z| > 3) / P(|z| > 1)"] == pytest.approx(
+        0.0027 / 0.3173, rel=1e-2
+    )
+    assert set(out["histories"]) == {"pooled", *frame.columns}
+    assert {"per_ticker", "n_series", "normalization", "pooling"} <= set(out)
