@@ -6,6 +6,7 @@ statistics (turnover) rather than creating a change across the gap.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from statistics import NormalDist
@@ -98,6 +99,7 @@ def series_statistics(
     rolling_window: int | None = None,
     extreme_multiples: Sequence[float] = (),
     turnover: Callable[[pd.Series], float] | None = None,
+    readable_columns: bool = False,
 ) -> pd.DataFrame:
     """One row per series: moments, quantiles, tail frequencies and turnover.
 
@@ -138,6 +140,10 @@ def series_statistics(
             ``tail_normalize`` and ``tail_center``.
         turnover: Replaces :func:`series_turnover_ratio` in the ``turnover_ratio`` column; takes
             the series, returns a scalar.
+        readable_columns: Title the columns for reading instead of the code names:
+            ``P(|z| > 1)``, ``n(|z| > 1)``, ``Top 1% squared share``, ``ACF lag 5``, ``Mean |x|``,
+            ``1% quantile`` ... (``z`` is the value divided by its own ``tail_normalize`` scale).
+            Custom metric columns keep their names.
 
     Returns:
         DataFrame indexed by series label with columns ``n, mean, std, rms, mean_absolute,
@@ -195,7 +201,57 @@ def series_statistics(
         for metric_name, fn in (metrics or {}).items():
             row[metric_name] = float(fn(x))
         rows[str(name)] = row
-    return pd.DataFrame.from_dict(rows, orient="index")
+    table = pd.DataFrame.from_dict(rows, orient="index")
+    return table.rename(columns=_readable_names(list(table.columns))) if readable_columns else table
+
+
+_READABLE: tuple[tuple[re.Pattern[str], Callable[[re.Match[str]], str]], ...] = (
+    (re.compile(r"tail_probability_([\d.]+)(?:rms|std)"), lambda m: f"P(|z| > {m[1]})"),
+    (re.compile(r"tail_count_([\d.]+)(?:rms|std)"), lambda m: f"n(|z| > {m[1]})"),
+    (
+        re.compile(r"tail_ratio_([\d.]+)(?:rms|std)?_([\d.]+)(?:rms|std)?"),
+        lambda m: f"P(|z| > {m[1]}) / P(|z| > {m[2]})",
+    ),
+    (re.compile(r"tail_([\d.]+)"), lambda m: f"P(|z| > {m[1]})"),
+    (re.compile(r"squared_tail_share_([\d.]+)pct"), lambda m: f"Top {m[1]}% squared share"),
+    (re.compile(r"extreme_frequency_([\d.]+)rms"), lambda m: f"P(|x| > {m[1]} rms)"),
+    (re.compile(r"acf_(\d+)"), lambda m: f"ACF lag {m[1]}"),
+    (re.compile(r"abs_acf_(\d+)"), lambda m: f"|x| ACF lag {m[1]}"),
+    (re.compile(r"squared_acf_(\d+)"), lambda m: f"x² ACF lag {m[1]}"),
+    (re.compile(r"rolling_rms_cv_(\d+)"), lambda m: f"Std / mean of {m[1]}-obs rolling RMS"),
+)
+
+
+_PLAIN = {
+    "n": "n (observations)",
+    "mean": "Mean",
+    "std": "Std (ddof=0)",
+    "rms": "RMS (root mean square)",
+    "mean_absolute": "Mean |x|",
+    "mean_over_std": "Mean / std",
+    "skewness": "Skewness",
+    "excess_kurtosis": "Excess kurtosis (0 = normal)",
+    "median": "Median",
+    "min": "Min",
+    "max": "Max",
+    "turnover_ratio": "Turnover ratio (mean |change| / mean |x|)",
+}
+
+
+def _readable_names(columns: Sequence[str]) -> dict[str, str]:
+    """``{column: readable title}``: ``tail_probability_3rms`` becomes ``P(|z| > 3)``."""
+    out = {c: _PLAIN.get(c, c) for c in columns}
+    for column in columns:
+        if match := re.fullmatch(r"q(\d+)(?:_(\d+))?", column):
+            out[column] = (
+                f"{match[1].lstrip('0') or '0'}{'.' + match[2] if match[2] else ''}% quantile"
+            )
+            continue
+        for pattern, title in _READABLE:
+            if match := pattern.fullmatch(column):
+                out[column] = title(match)
+                break
+    return out
 
 
 def _tail_columns(

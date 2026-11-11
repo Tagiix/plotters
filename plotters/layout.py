@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from typing import Literal
+from typing import Any, Literal
 
+import numpy as np
 import plotly.graph_objects as go
 
 from . import style as _style
@@ -163,8 +164,54 @@ def finish(
         fig.update_xaxes(title_text=xlabel)
     if ylabel:
         fig.update_yaxes(title_text=ylabel)
+    if fig.layout["hovermode"] is None:
+        fig.update_layout(hovermode=_hovermode(fig))
     _maybe_display(fig)
     return fig
+
+
+def prefix_views(fig: go.Figure, prefix: str) -> go.Figure:
+    """Write ``"<prefix>: "`` before every dropdown entry (``Ticker: AAPL``); modifies ``fig``.
+
+    The prefix is remembered, so :func:`plotters.annotate_views` still accepts the plain names.
+    """
+    menus = fig.to_plotly_json()["layout"].get("updatemenus")
+    if not prefix or not menus:
+        return fig
+    menu = menus[0]
+    for button in menu["buttons"]:
+        if not button["label"].startswith(f"{prefix}: "):
+            button["label"] = f"{prefix}: {button['label']}"
+    fig.update_layout(updatemenus=[menu], meta={"view_prefix": prefix})
+    return fig
+
+
+def _hovermode(fig: go.Figure) -> str:
+    """``"x unified"`` for lines over a shared axis (several series, or one over dates), else ``"closest"``.
+
+    A unified hover reads every trace at the cursor's x, which suits time series. For points,
+    boxes and bars it only finds whichever line happens to sit at that x, so the nearest mark
+    is hovered instead.
+    """
+    traces: list[Any] = list(fig.data)
+    lines = [
+        t
+        for t in traces
+        if getattr(t, "type", None) == "scatter"
+        and "lines" in (t.mode or "")
+        and t.visible is not False
+        and t.hoverinfo != "skip"
+    ]
+    if len(lines) > 1:
+        return "x unified"
+    if lines:
+        x = lines[0].x
+        return (
+            "x unified"
+            if x is not None and len(x) and np.asarray(x).dtype.kind == "M"
+            else "closest"
+        )
+    return "closest"
 
 
 # Anchors per decade, tried from sparse to dense until at least four ticks fall in range.

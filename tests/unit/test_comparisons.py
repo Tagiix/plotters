@@ -252,3 +252,20 @@ def test_tradeoff_hover_picks_the_nearest_point(table):
     assert fig.layout.hovermode == "closest"
     front = next(t for t in fig.data if t.name == "Pareto frontier")
     assert front.hoverinfo == "skip"
+
+
+def test_hover_unified_only_for_lines_on_a_shared_axis():
+    rng = np.random.default_rng(1)
+    days = pd.date_range("2020-01-01", periods=30)
+    one = pd.Series(rng.normal(size=30), index=days, name="a")
+    two = pd.DataFrame({"a": one, "b": one * 2})
+    assert pl.plot_series(one).layout.hovermode == "x unified"
+    assert pl.plot_series(two).layout.hovermode == "x unified"
+    table = pd.DataFrame({"m": list("abcde"), "lo": [1, 2, 3, 4, 5.0], "hi": [2, 3, 4, 5, 6.0],
+                          "v": [1.5, 2.5, 3.5, 4.5, 5.5]})  # fmt: skip
+    for fig in (
+        pl.plot_interval(table, "lo", "hi", "v", label="m"),
+        pl.plot_bars({"a": 1, "b": 2}),
+        pl.plot_roc(rng.integers(0, 2, 50), pd.Series(rng.uniform(size=50), name="s")),
+    ):
+        assert fig.layout.hovermode == "closest"

@@ -196,3 +196,25 @@ def test_analyze_series_readable_titles_and_extra_keys(frame):
     )
     assert set(out["histories"]) == {"pooled", *frame.columns}
     assert {"per_ticker", "n_series", "normalization", "pooling"} <= set(out)
+
+
+def test_view_prefix_on_plot_series_and_plot_views_keeps_annotate_views_working(frame):
+    fig = pl.plot_series(frame, views={"first": ["a"], "rest": ["b", "c"]}, view_prefix="Ticker")
+    labels = [b.label for b in fig.layout.updatemenus[0].buttons]
+    assert labels == ["Ticker: first", "Ticker: rest"]
+    pl.annotate_views(fig, {"first": "note"})  # the plain name still works
+    merged = pl.plot_views(
+        {"x": pl.plot_series(frame["a"]), "y": pl.plot_series(frame["b"])}, view_prefix="Ticker"
+    )
+    assert [b.label for b in merged.layout.updatemenus[0].buttons] == ["Ticker: x", "Ticker: y"]
+
+
+def test_readable_columns_on_series_statistics_and_compare_series(frame):
+    plain = pl.series_statistics(frame, thresholds=(1,), tail_normalize="rms")
+    nice = pl.series_statistics(frame, thresholds=(1,), tail_normalize="rms", readable_columns=True)
+    assert "tail_probability_1rms" in plain.columns and "P(|z| > 1)" in nice.columns
+    assert nice["P(|z| > 1)"].tolist() == plain["tail_probability_1rms"].tolist()
+    out = pl.compare_series(frame, value_label="return (%)", readable_columns=True)
+    assert "Mean |x|" in out["stats"].columns
+    assert out["figures"]["cumulative"].layout.yaxis.title.text == "cumulative return (%)"
+    assert "mean_absolute" in pl.compare_series(frame)["stats"].columns

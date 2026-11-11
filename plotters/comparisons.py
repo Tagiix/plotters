@@ -24,9 +24,7 @@ from . import _color
 from . import style as _style
 from ._checks import (
     _MARKER_SIZE,
-    _axis_values,
-    _declutter,
-    _label_once,
+    _label_texts,
     _log_bounds,
     _numeric,
 )
@@ -154,16 +152,10 @@ def plot_tradeoff(
     family_names = list(pd.unique(families))
 
     all_names = _one_column(frame, label).astype(str).to_numpy() if label else None
-    texts = None
-    if all_names is not None and label_text != "hover":
-        texts = all_names.astype(object)
-        if label_text == "auto":
-            texts = np.full(all_names.shape, "", dtype=object)
-            ax, ay = _axis_values(xs, logx), _axis_values(ys, logy)
-            for member in pd.unique(members):
-                m = (members == member).to_numpy()
-                texts[m] = _label_once(all_names[m], ax[m], ay[m])
-            texts = _declutter(texts, ax, ay, front, chars_per_axis=max(width or 900, 300) / 7)
+    texts = _label_texts(
+        all_names, xs, ys, members.to_numpy(), label_text,
+        priority=front, logx=logx, logy=logy, width=width,
+    )  # fmt: skip
 
     fig = go.Figure()
     for f, fam in enumerate(family_names):

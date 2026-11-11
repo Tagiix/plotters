@@ -19,9 +19,10 @@ from . import _color
 from . import style as _style
 from ._types import SeriesLike
 from .frames import as_series_dict, pick
-from .layout import HEIGHT
+from .layout import HEIGHT, prefix_views
 from .stats import (
     _finite,
+    _readable_names,
     normalize_series,
     series_statistics,
     series_turnover_ratio,
@@ -244,65 +245,6 @@ def _add_baselines(
     fig.update_layout(updatemenus=[menu])
 
 
-def _prefix_views(fig: go.Figure, prefix: str) -> None:
-    menus = fig.to_plotly_json()["layout"].get("updatemenus")
-    if not menus:
-        return
-    menu = menus[0]
-    for button in menu["buttons"]:
-        button["label"] = f"{prefix}: {button['label']}"
-    fig.update_layout(updatemenus=[menu])
-
-
-_READABLE: tuple[tuple[re.Pattern[str], Callable[[re.Match[str]], str]], ...] = (
-    (re.compile(r"tail_probability_([\d.]+)(?:rms|std)"), lambda m: f"P(|z| > {m[1]})"),
-    (re.compile(r"tail_count_([\d.]+)(?:rms|std)"), lambda m: f"n(|z| > {m[1]})"),
-    (
-        re.compile(r"tail_ratio_([\d.]+)(?:rms|std)?_([\d.]+)(?:rms|std)?"),
-        lambda m: f"P(|z| > {m[1]}) / P(|z| > {m[2]})",
-    ),
-    (re.compile(r"tail_([\d.]+)"), lambda m: f"P(|z| > {m[1]})"),
-    (re.compile(r"squared_tail_share_([\d.]+)pct"), lambda m: f"Top {m[1]}% squared share"),
-    (re.compile(r"extreme_frequency_([\d.]+)rms"), lambda m: f"P(|x| > {m[1]} rms)"),
-    (re.compile(r"acf_(\d+)"), lambda m: f"ACF lag {m[1]}"),
-    (re.compile(r"abs_acf_(\d+)"), lambda m: f"|x| ACF lag {m[1]}"),
-    (re.compile(r"squared_acf_(\d+)"), lambda m: f"x² ACF lag {m[1]}"),
-    (re.compile(r"rolling_rms_cv_(\d+)"), lambda m: f"Std / mean of {m[1]}-obs rolling RMS"),
-)
-
-
-_PLAIN = {
-    "n": "n (observations)",
-    "mean": "Mean",
-    "std": "Std (ddof=0)",
-    "rms": "RMS (root mean square)",
-    "mean_absolute": "Mean |x|",
-    "mean_over_std": "Mean / std",
-    "skewness": "Skewness",
-    "excess_kurtosis": "Excess kurtosis (0 = normal)",
-    "median": "Median",
-    "min": "Min",
-    "max": "Max",
-    "turnover_ratio": "Turnover ratio (mean |change| / mean |x|)",
-}
-
-
-def _readable_names(columns: Sequence[str]) -> dict[str, str]:
-    """``{column: readable title}``: ``tail_probability_3rms`` becomes ``P(|z| > 3)``."""
-    out = {c: _PLAIN.get(c, c) for c in columns}
-    for column in columns:
-        if match := re.fullmatch(r"q(\d+)(?:_(\d+))?", column):
-            out[column] = (
-                f"{match[1].lstrip('0') or '0'}{'.' + match[2] if match[2] else ''}% quantile"
-            )
-            continue
-        for pattern, title in _READABLE:
-            if match := pattern.fullmatch(column):
-                out[column] = title(match)
-                break
-    return out
-
-
 def _normal_tails(columns: Sequence[str], labels: Mapping[str, str]) -> tuple[pd.Series, pd.Series]:
     """Tail probabilities and ratios of N(0, 1) for the thresholds the table holds."""
     probs: dict[str, float] = {}
@@ -481,7 +423,7 @@ def analyze_series(
         figures["histogram"].update_xaxes(title_text=value_label)
     if view_prefix:
         for fig in figures.values():
-            _prefix_views(fig, view_prefix)
+            prefix_views(fig, view_prefix)
     first = [c for c in ("n", *display_stats) if c in stats.columns]
     stats = stats[[*first, *[c for c in stats.columns if c not in first]]]
     labels = (
@@ -541,6 +483,8 @@ def compare_series(
     series: Sequence[str] | None = None,
     align: Literal["inner", "outer"] = "inner",
     quantiles: Sequence[float] = (0.05, 0.5, 0.95),
+    value_label: str = "",
+    readable_columns: bool = False,
 ) -> dict[str, Any]:
     """Several series on the same dates: cumulative paths and differences against one.
 
@@ -555,6 +499,9 @@ def compare_series(
         align: ``"inner"`` uses the observations that are common and finite for all inputs.
             ``"outer"`` keeps gaps, and each difference uses its own available pairs.
         quantiles: Levels for the statistics table of the differences.
+        value_label: Quantity and units for the y axes, e.g. ``"return (%)"``.
+        readable_columns: Title the statistics columns for reading (``Mean |x|``, ``5% quantile``
+            ...) instead of the code names.
 
     Returns:
         ``{"data", "cumulative", "difference", "stats", "figures"}``: aligned inputs, their
@@ -583,16 +530,21 @@ def compare_series(
     cumulative = wide.cumsum()
     prefix = f"{title}: " if title else ""
     figures = {
-        "cumulative": plot_series(cumulative, prefix + "cumulative paths", ylabel="cumulative sum"),
+        "cumulative": plot_series(
+            cumulative, prefix + "cumulative paths",
+            ylabel=f"cumulative {value_label}" if value_label else "cumulative sum",
+        ),
         "difference": plot_series(
             difference.cumsum(), prefix + f"cumulative difference ({ref} minus others)",
-            ylabel="cumulative difference",
+            ylabel=f"cumulative difference ({value_label})" if value_label else "cumulative difference",
         ),
     }  # fmt: skip
     return {
         "data": wide,
         "cumulative": cumulative,
         "difference": difference,
-        "stats": series_statistics(difference, quantiles=quantiles),
+        "stats": series_statistics(
+            difference, quantiles=quantiles, readable_columns=readable_columns
+        ),
         "figures": figures,
     }

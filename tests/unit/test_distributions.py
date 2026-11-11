@@ -159,3 +159,12 @@ def test_expectile_curve_passes_through_one_and_is_steeper_for_heavier_tails(rng
 def test_null_test_observed_label():
     fig = pl.plot_null_test(np.random.default_rng(0).normal(size=300), 0.0, observed_label="equal")
     assert any(a.text == "equal +0" for a in fig.layout.annotations)
+
+
+def test_histogram_hist_range_and_ecdf_x_range():
+    x = pd.Series(np.concatenate([np.zeros(90), np.full(10, 100.0)]), name="x")
+    fig = pl.plot_histogram(x, bins=10, density=True, hist_range=(-1, 1))
+    bar = fig.data[0]
+    assert min(bar.x) >= -1 and max(bar.x) <= 1
+    assert float(np.sum(np.asarray(bar.y) * np.asarray(bar.width))) == pytest.approx(0.9)
+    assert list(pl.plot_ecdf(x, x_range=(-1, 5)).layout.xaxis.range) == [-1, 5]

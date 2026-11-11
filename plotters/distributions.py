@@ -263,6 +263,7 @@ def plot_histogram(
     bins: int = 50,
     density: bool = False,
     normal: bool = False,
+    hist_range: tuple[float, float] | None = None,
     xlabel: str = "",
     height: int = HEIGHT,
     width: int | None = None,
@@ -277,6 +278,9 @@ def plot_histogram(
         bins: Number of bins (shared by all series).
         density: Scale so the area is 1, making different sample sizes comparable.
         normal: Overlay a normal fitted to each series (mean and standard deviation).
+        hist_range: ``(low, high)`` window the bins cover; default is the extent of all series.
+            With ``density=True`` values outside the window stay in the denominator, so a limit
+            never erases tail probability (as in :func:`plot_series_distribution`).
         xlabel: X axis title.
         height: Figure height in px.
         width: Figure width in px; ``None`` fills the container.
@@ -285,8 +289,10 @@ def plot_histogram(
         ValueError: an empty series.
     """
     bags = _bags(data, series, "plot_histogram")
-    lo = min(v.min() for v in bags.values())
-    hi = max(v.max() for v in bags.values())
+    lo, hi = hist_range or (
+        min(v.min() for v in bags.values()),
+        max(v.max() for v in bags.values()),
+    )
     edges = np.linspace(lo, hi, bins + 1) if lo < hi else np.linspace(lo - 0.5, hi + 0.5, bins + 1)
     bin_width = edges[1] - edges[0]
     centers = (edges[:-1] + edges[1:]) / 2
@@ -323,6 +329,7 @@ def plot_ecdf(
     complementary: bool = False,
     logx: bool = False,
     logy: bool = False,
+    x_range: tuple[float, float] | None = None,
     xlabel: str = "",
     height: int = HEIGHT,
     width: int | None = None,
@@ -340,6 +347,8 @@ def plot_ecdf(
         complementary: Plot ``P(X > x)`` instead of ``P(X <= x)``.
         logx: Logarithmic x axis (data must be > 0).
         logy: Logarithmic y axis.
+        x_range: ``(low, high)`` window shown on the x axis (data outside it is still part of
+            the curve); default is the full extent.
         xlabel: X axis title.
         height: Figure height in px.
         width: Figure width in px; ``None`` fills the container.
@@ -365,7 +374,9 @@ def plot_ecdf(
         allx = np.concatenate(list(bags.values()))
         if (allx <= 0).any():
             raise ValueError("logx needs strictly positive data")
-        apply_log(fig, "x", float(allx.min()) / 1.2, float(allx.max()) * 1.2)
+        apply_log(fig, "x", *(x_range or (float(allx.min()) / 1.2, float(allx.max()) * 1.2)))
+    elif x_range:
+        fig.update_xaxes(range=list(x_range))
     if logy:
         fig.update_yaxes(type="log")
     ylabel = "P(X ≥ x)" if complementary else "P(X ≤ x)"

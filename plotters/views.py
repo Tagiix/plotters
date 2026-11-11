@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from . import style as _style
-from .layout import HEIGHT, finish
+from .layout import HEIGHT, finish, prefix_views
 
 __all__ = ["plot_views", "annotate_views", "plot_grid"]
 
@@ -96,6 +96,7 @@ def plot_views(
     dropdown_x: float = 0.0,
     dropdown_y: float = 1.0,
     legend: bool | None = None,
+    view_prefix: str = "",
 ) -> go.Figure:
     """Merge prepared figures into one that switches between them with a dropdown.
 
@@ -116,6 +117,7 @@ def plot_views(
         dropdown_x: Dropdown x position in paper units.
         dropdown_y: Dropdown y position in paper units (above the plot at 1.0).
         legend: ``None`` shows it when the first view has more than one named trace.
+        view_prefix: Text before each dropdown entry, e.g. ``"Ticker"`` gives ``Ticker: AAPL``.
 
     Returns:
         The merged figure. With a single view no dropdown is added.
@@ -190,6 +192,7 @@ def plot_views(
                 }
             ]
         )
+    prefix_views(merged, view_prefix)
     return finish(
         merged, title, subtitle, height=height, legend=legend, menu=len(names) > 1, width=width
     )
@@ -213,7 +216,10 @@ def annotate_views(fig: go.Figure, texts: Mapping[str, str]) -> go.Figure:
         raise ValueError("fig has no dropdown; build it with plot_views or plot_series(views=)")
     menu = fig.layout.updatemenus[0]
     labels = [b.label for b in menu.buttons]
-    unknown = [k for k in texts if k not in labels]
+    meta = fig.layout["meta"]
+    lead = f"{meta['view_prefix']}: " if isinstance(meta, dict) and meta.get("view_prefix") else ""
+    plain = {b.label: b.label.removeprefix(lead) for b in menu.buttons}
+    unknown = [k for k in texts if k not in labels and k not in plain.values()]
     if unknown:
         raise ValueError(f"unknown views {unknown}; the dropdown has {labels}")
 
@@ -233,8 +239,9 @@ def annotate_views(fig: go.Figure, texts: Mapping[str, str]) -> go.Figure:
         args = list(b.args)
         relayout = dict(args[1]) if len(args) > 1 else {}
         current = list(relayout.get("annotations", base))
-        if b.label in extra_for:
-            current = [a for a in current if a not in extra_for.values()] + [extra_for[b.label]]
+        key = b.label if b.label in extra_for else plain[b.label]
+        if key in extra_for:
+            current = [a for a in current if a not in extra_for.values()] + [extra_for[key]]
         relayout["annotations"] = current
         args = [args[0], relayout]
         new_buttons.append({"label": b.label, "method": b.method, "args": args})

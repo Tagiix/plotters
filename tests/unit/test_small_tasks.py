@@ -203,12 +203,18 @@ def _pairs(n):
     )  # fmt: skip
 
 
-def test_labels_are_written_only_when_few_and_always_on_hover():
+def test_labels_are_decluttered_and_always_on_hover():
     for fn, extra in ((pl.plot_shaded_scatter, {"shade": "s"}), (pl.plot_scatter, {})):
         few = fn(_pairs(10), "x", "y", label="p", **extra).data[0]
         many = fn(_pairs(500), "x", "y", label="p", **extra).data[0]
-        assert few.mode == "markers+text" and many.mode == "markers"
+        written = lambda tr: sum(1 for t in tr.text if t)  # noqa: E731
+        assert few.mode == "markers+text" and written(few) > 0
+        assert 0 < written(many) < 250, "a readable subset of 500 names, not a wall of text"
         assert "customdata" in many.hovertemplate
+        every = fn(_pairs(500), "x", "y", label="p", label_text="always", **extra).data[0]
+        assert written(every) == 500
+        hover = fn(_pairs(500), "x", "y", label="p", label_text="hover", **extra).data[0]
+        assert hover.mode == "markers" and "customdata" in hover.hovertemplate
 
 
 def test_scatter_hover_is_closest_point():

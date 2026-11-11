@@ -52,12 +52,45 @@ def _declutter(
     fx, fy = (xs - np.nanmin(xs)) / span_x, (ys - np.nanmin(ys)) / span_y
     boxes: list[tuple[float, float, float, float]] = []
     for i in shown[np.argsort(~priority[shown], kind="stable")]:
-        w = (len(str(labels[i])) + 1) / chars_per_axis
-        box = (fx[i], fx[i] + w, fy[i], fy[i] + 0.05)
+        w = (len(str(labels[i])) + 2) / chars_per_axis
+        box = (fx[i], fx[i] + w, fy[i], fy[i] + 0.065)
         if all(box[0] > b[1] or box[1] < b[0] or box[2] > b[3] or box[3] < b[2] for b in boxes):
             boxes.append(box)
             keep[i] = labels[i]
     return keep
+
+
+def _label_texts(
+    names: np.ndarray | None,
+    xs: np.ndarray,
+    ys: np.ndarray,
+    members: np.ndarray,
+    mode: str,
+    *,
+    priority: np.ndarray | None = None,
+    logx: bool = False,
+    logy: bool = False,
+    width: int | None = None,
+) -> np.ndarray | None:
+    """The text written next to each point for ``label_text`` ``mode``; ``None`` writes nothing.
+
+    ``"always"``: every name. ``"auto"``: each name once per member (the point nearest its
+    centroid), then any text that would overprint a kept one is dropped, ``priority`` points
+    first. ``"hover"``: nothing.
+    """
+    if mode not in ("auto", "always", "hover"):
+        raise ValueError(f"label_text must be 'auto', 'always' or 'hover', got {mode!r}")
+    if names is None or mode == "hover":
+        return None
+    if mode == "always":
+        return names.astype(object)
+    ax, ay = _axis_values(xs, logx), _axis_values(ys, logy)
+    texts = np.full(names.shape, "", dtype=object)
+    for member in pd.unique(members):
+        m = members == member
+        texts[m] = _label_once(names[m], ax[m], ay[m])
+    first = np.zeros(names.shape, dtype=bool) if priority is None else priority
+    return _declutter(texts, ax, ay, first, chars_per_axis=(max(width or 900, 300) - 90) / 7.5)
 
 
 def _axis_values(values: np.ndarray, log: bool) -> np.ndarray:

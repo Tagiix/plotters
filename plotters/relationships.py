@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -18,17 +19,13 @@ from . import _color
 from . import style as _style
 from ._checks import (
     _MARKER_SIZE,
-    _axis_values,
-    _label_once,
+    _label_texts,
     _log_bounds,
     _numeric,
 )
 from ._errors import convention_error
 from .frames import _one_column, _require_columns
 from .layout import HEIGHT, apply_log, finish
-
-_MAX_WRITTEN_LABELS = 40
-"""Past this many points a label is hover-only: written next to every point it is unreadable."""
 
 __all__ = [
     "plot_scatter",
@@ -65,6 +62,7 @@ def plot_scatter(
     *,
     group: str | None = None,
     label: str | None = None,
+    label_text: Literal["auto", "always", "hover"] = "auto",
     size: str | None = None,
     diagonal: bool = False,
     logx: bool = False,
@@ -89,8 +87,11 @@ def plot_scatter(
         subtitle: Muted line under the title.
         group: Column whose values each become one coloured series (colour and shape both change,
             so a label is optional).
-        label: Column naming each point. Always shown on hover; also written on the plot, once per
-            distinct value (on the point nearest its centroid), when there are at most 40 of them.
+        label: Column naming each point. Always shown on hover; see ``label_text`` for what is
+            written on the plot.
+        label_text: ``"auto"``: each distinct name once (on the point nearest its centroid),
+            skipping any text that would overprint another; zoom in to see more. ``"always"``:
+            one text per point, even if they overlap. ``"hover"``: nothing on the plot.
         size: Non-negative numeric column that sets each marker's **area** (a bubble chart). The
             default subtitle says so.
         diagonal: Draw ``y = x``.
@@ -114,18 +115,17 @@ def plot_scatter(
     )
     st = _style.get_style()
     fig = go.Figure()
+    all_names = _one_column(frame, label).astype(str).to_numpy() if label else None
+    members = _one_column(frame, group).astype(str).to_numpy() if group else np.full(len(frame), "")
+    texts = _label_texts(all_names, xs, ys, members, label_text, logx=logx, logy=logy, width=width)
     parts: list[tuple[str, pd.Index]] = [("", frame.index)]
     if group is not None:
         values = list(pd.unique(_one_column(frame, group)))
         parts = [(str(v), frame.index[_one_column(frame, group).to_numpy() == v]) for v in values]
     for i, (name, idx) in enumerate(parts):
         mask = frame.index.isin(idx)
-        names = _one_column(frame, label).astype(str).to_numpy()[mask] if label else None
-        text = (
-            _label_once(names, _axis_values(xs, logx)[mask], _axis_values(ys, logy)[mask])
-            if names is not None
-            else None
-        )
+        names = all_names[mask] if all_names is not None else None
+        text = texts[mask] if texts is not None else None
         marker = {
             **_style.marker(i, size=_MARKER_SIZE),
             "color": _style.color(i) if group else st.accent,
@@ -137,9 +137,8 @@ def plot_scatter(
                 opacity=0.7,
                 line={"width": 1, "color": st.surface},
             )
-        written = names is not None and len(set(names)) <= _MAX_WRITTEN_LABELS
         fig.add_scatter(
-            x=xs[mask], y=ys[mask], mode="markers+text" if written else "markers", name=name,
+            x=xs[mask], y=ys[mask], mode="markers+text" if text is not None else "markers", name=name,
             marker=marker, text=text, textposition="top right", textfont={"size": 10, "color": st.muted},
             customdata=names,
             hovertemplate=(f"%{{customdata}}<br>{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<extra>{name}</extra>" if label else None),
@@ -168,6 +167,7 @@ def plot_shaded_scatter(
     subtitle: str = "",
     *,
     label: str | None = None,
+    label_text: Literal["auto", "always", "hover"] = "auto",
     size: str | None = None,
     log_shade: bool = False,
     reference: float | None = None,
@@ -191,8 +191,11 @@ def plot_shaded_scatter(
         shade: Numeric column that sets the colour.
         title: Figure title.
         subtitle: Muted line under the title.
-        label: Column naming each point. Always shown on hover; also written on the plot, once per
-            distinct value (on the point nearest its centroid), when there are at most 40 of them.
+        label: Column naming each point. Always shown on hover; see ``label_text`` for what is
+            written on the plot.
+        label_text: ``"auto"``: each distinct name once (on the point nearest its centroid),
+            skipping any text that would overprint another; zoom in to see more. ``"always"``:
+            one text per point, even if they overlap. ``"hover"``: nothing on the plot.
         size: Non-negative numeric column that sets each marker's area, so one chart carries four
             variables (x, y, colour and size).
         log_shade: Colour by ``log10(shade)`` for a geometric ratio (needs positive values);
@@ -257,15 +260,12 @@ def plot_shaded_scatter(
         "ticktext": [f"{10**t:.3g}" if log_shade else f"{t:.3g}" for t in ticks],
     }  # fmt: skip
     names = _one_column(frame, label).astype(str).to_numpy() if label else None
-    text = (
-        _label_once(names, _axis_values(xs, logx), _axis_values(ys, logy))
-        if names is not None
-        else None
+    text = _label_texts(
+        names, xs, ys, np.full(sh.shape, ""), label_text, logx=logx, logy=logy, width=width
     )
-    written = names is not None and len(set(names)) <= _MAX_WRITTEN_LABELS
     head = "%{customdata[1]}<br>" if label else ""
     fig = go.Figure(go.Scatter(
-        x=xs, y=ys, mode="markers+text" if written else "markers", marker=marker, text=text,
+        x=xs, y=ys, mode="markers+text" if text is not None else "markers", marker=marker, text=text,
         textposition="top right", textfont={"size": 10, "color": st.muted},
         customdata=np.stack([sh, names if names is not None else np.full(sh.shape, "")], axis=-1),
         hovertemplate=f"{head}{x}=%{{x:.4g}}<br>{y}=%{{y:.4g}}<br>{shade}=%{{customdata[0]:.4g}}<extra></extra>",

@@ -18,7 +18,7 @@ from . import style as _style
 from ._errors import convention_error
 from ._types import MAX_SERIES, MAX_VISIBLE, SeriesLike
 from .frames import as_series_dict, pick
-from .layout import HEIGHT, apply_log, finish
+from .layout import HEIGHT, apply_log, finish, prefix_views
 
 __all__ = [
     "plot_series",
@@ -217,6 +217,7 @@ def plot_series(
     spans: Mapping[str, tuple[Any, Any]] | None = None,
     step: bool = False,
     views: Mapping[str, Sequence[str]] | None = None,
+    view_prefix: str = "",
     drawn: int = MAX_VISIBLE,
     xlabel: str = "",
     ylabel: str = "",
@@ -251,6 +252,7 @@ def plot_series(
             between named subsets of the series already passed. Every series is drawn once
             and the menu toggles ``visible``, so an exported HTML keeps working with no
             server. A series named in no view stays visible in all of them.
+        view_prefix: Text before each dropdown entry, e.g. ``"Ticker"`` gives ``Ticker: AAPL``.
         drawn: How many series start drawn (default 20; ``0`` also means the default, it never
             hides everything). The rest are greyed out in the legend.
         xlabel: X axis title.
@@ -323,6 +325,7 @@ def plot_series(
                 }
             ]
         )
+        prefix_views(fig, view_prefix)
 
     if percent:
         fig.update_yaxes(tickformat=_PERCENT_TICKS)
