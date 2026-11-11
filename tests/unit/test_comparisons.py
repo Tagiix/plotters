@@ -245,3 +245,10 @@ def test_tradeoff_frontier_switch(table):
     assert (
         pl.plot_tradeoff(table, "cost", "error", frontier=True).to_dict() == on.to_dict()
     )  # default
+
+
+def test_tradeoff_hover_picks_the_nearest_point(table):
+    fig = pl.plot_tradeoff(table, "cost", "error")
+    assert fig.layout.hovermode == "closest"
+    front = next(t for t in fig.data if t.name == "Pareto frontier")
+    assert front.hoverinfo == "skip"

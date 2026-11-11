@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -24,6 +25,7 @@ from . import style as _style
 from ._checks import (
     _MARKER_SIZE,
     _axis_values,
+    _declutter,
     _label_once,
     _log_bounds,
     _numeric,
@@ -84,6 +86,8 @@ def plot_tradeoff(
     groups: Mapping[str, Sequence[str]] | None = None,
     lower_is_better: bool | tuple[bool, bool] = (True, True),
     frontier: bool = True,
+    rings: bool = True,
+    label_text: Literal["auto", "always", "hover"] = "auto",
     connect: str | None = None,
     logx: bool = False,
     logy: bool = False,
@@ -104,8 +108,8 @@ def plot_tradeoff(
         y: Column for the second objective.
         title: Figure title.
         subtitle: Muted line under the title; a default states which corner wins.
-        label: Column naming each point (e.g. the model name): shown on hover and written once per
-            distinct value, on the point nearest its centroid, so repeated names do not overprint.
+        label: Column naming each point (e.g. the model name); always shown on hover. See ``label_text``
+            for what is written on the plot.
         group: Column naming the member of a family (each value gets its own colour and shape; ``groups``
             collapses them into families).
         groups: ``{family: prefixes}``. Collapses ``group``'s values into families by the
@@ -113,6 +117,12 @@ def plot_tradeoff(
         lower_is_better: Which corner wins: one bool for both axes or ``(x_flag, y_flag)``.
         frontier: Draw the Pareto frontier (dashed line, ringed points). ``False`` leaves the plain
             scatter, still coloured and shaped by ``group`` / ``groups``.
+        rings: Ring the frontier points. ``False`` keeps the dashed line and the legend entry but
+            draws no circle around the points.
+        label_text: What ``label`` writes on the plot. ``"auto"``: each distinct name once (on the
+            point nearest its centroid), skipping any text that would overprint another, frontier
+            points first; zoom in to reveal more. ``"always"``: one text per point, even if they
+            overlap. ``"hover"``: nothing on the plot, hover only.
         connect: Numeric column; joins each group's points in order along it, turning a cloud into
             one path per group.
         logx: Logarithmic x axis.
@@ -143,6 +153,18 @@ def plot_tradeoff(
         families = members
     family_names = list(pd.unique(families))
 
+    all_names = _one_column(frame, label).astype(str).to_numpy() if label else None
+    texts = None
+    if all_names is not None and label_text != "hover":
+        texts = all_names.astype(object)
+        if label_text == "auto":
+            texts = np.full(all_names.shape, "", dtype=object)
+            ax, ay = _axis_values(xs, logx), _axis_values(ys, logy)
+            for member in pd.unique(members):
+                m = (members == member).to_numpy()
+                texts[m] = _label_once(all_names[m], ax[m], ay[m])
+            texts = _declutter(texts, ax, ay, front, chars_per_axis=max(width or 900, 300) / 7)
+
     fig = go.Figure()
     for f, fam in enumerate(family_names):
         in_family = (families == fam).to_numpy()
@@ -151,15 +173,11 @@ def plot_tradeoff(
             mask = in_family & (members == member).to_numpy()
             # members of one family differ by shape; without families each group needs its own
             base = _style.marker(k if groups is not None else f, size=_MARKER_SIZE)
-            names = _one_column(frame, label).astype(str).to_numpy()[mask] if label else None
-            text = (
-                _label_once(names, _axis_values(xs, logx)[mask], _axis_values(ys, logy)[mask])
-                if names is not None
-                else None
-            )
+            names = all_names[mask] if all_names is not None else None
+            text = texts[mask] if texts is not None else None
             name = member
             fig.add_scatter(
-                x=xs[mask], y=ys[mask], mode="markers+text" if label else "markers", name=name or "points",
+                x=xs[mask], y=ys[mask], mode="markers+text" if text is not None else "markers", name=name or "points",
                 legendgroup=fam, marker={**base, "color": _style.color(f) if group else st.accent},
                 text=text, textposition="top right", textfont={"size": 10, "color": st.muted},
                 customdata=names,
@@ -180,15 +198,20 @@ def plot_tradeoff(
             mode="lines",
             name="Pareto frontier",
             line={"color": st.muted, "width": 1.4, "dash": "dash"},
+            hoverinfo="skip",
         )
-        fig.add_scatter(x=fx, y=fy, mode="markers", showlegend=False, hoverinfo="skip",
-                        marker={"size": _MARKER_SIZE + 9, "color": "rgba(0,0,0,0)", "line": {"width": 1.5, "color": st.ink_2}})  # fmt: skip
+        if rings:
+            fig.add_scatter(x=fx, y=fy, mode="markers", showlegend=False, hoverinfo="skip",
+                            marker={"size": _MARKER_SIZE + 9, "color": "rgba(0,0,0,0)", "line": {"width": 1.5, "color": st.ink_2}})  # fmt: skip
+    fig.update_layout(hovermode="closest")  # the theme's "x unified" cannot pick one point
     if logx:
         apply_log(fig, "x", *_log_bounds(xs, caller, "x"))
     if logy:
         apply_log(fig, "y", *_log_bounds(ys, caller, "y"))
     corner = f"{'lower' if lx else 'higher'} {x}, {'lower' if ly else 'higher'} {y} wins"
-    note = f"{corner}; ringed points are the Pareto frontier" if frontier else corner
+    note = f"{corner}; ringed points are the Pareto frontier" if frontier and rings else corner
+    if frontier and not rings:
+        note = f"{corner}; dashed line is the Pareto frontier"
     return finish(fig, title, _sub(subtitle, note),
                   xlabel=xlabel or x, ylabel=ylabel or y, height=height, legend=frontier or bool(group), width=width)  # fmt: skip
 
