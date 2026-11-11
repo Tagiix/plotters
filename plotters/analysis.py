@@ -203,6 +203,7 @@ def analyze_series(
     *,
     series: Sequence[str] | None = None,
     bins: int = 50,
+    hist_range: tuple[float, float] | None = None,
     pooled: bool = True,
     normalize: Literal["std", "rms"] | None = None,
     center: bool = False,
@@ -227,6 +228,9 @@ def analyze_series(
         title: Prefix for the figure titles.
         series: Subset and order of series.
         bins: Histogram bins.
+        hist_range: ``(low, high)`` window drawn by the histogram, in the units after
+            ``normalize``; ``None`` shows each series' own extent. Values outside the window
+            stay in the density denominator and in ``stats``.
         pooled: Add a pooled view and a pooled statistics row.
         normalize: ``"std"`` or ``"rms"`` scales each series by its own full retained sample;
             ``None`` keeps the units. Descriptive normalisation, not a causal transform.
@@ -276,8 +280,8 @@ def analyze_series(
                 annotate_views(fig, turnover)
         figures[key] = fig
     figures["histogram"] = plot_series_distribution(
-        frames, prefix + "distribution", bins=bins, pooled=pooled, quantiles=quantiles,
-        display_stats=display_stats,
+        frames, prefix + "distribution", bins=bins, hist_range=hist_range, pooled=pooled,
+        quantiles=quantiles, display_stats=display_stats,
     )  # fmt: skip
     first = [c for c in ("n", *display_stats) if c in stats.columns]
     stats = stats[[*first, *[c for c in stats.columns if c not in first]]]

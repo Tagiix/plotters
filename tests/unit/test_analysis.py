@@ -111,3 +111,9 @@ def test_compare_validates(frame):
         pl.compare_series(frame["a"])
     with pytest.raises(ValueError):
         pl.compare_series(frame, align="left")  # type: ignore[arg-type]
+
+
+def test_analyze_series_hist_range_is_forwarded(frame):
+    out = pl.analyze_series(frame, hist_range=(-0.5, 0.5), bins=10)
+    bar = out["figures"]["histogram"].data[0]
+    assert min(bar.x) >= -0.5 and max(bar.x) <= 0.5

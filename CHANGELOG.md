@@ -21,4 +21,5 @@ First release.
 - Palette: 15 categorical colours (the original 8 unchanged, 7 added by a colour-blind-separation search), `set_style(colors=8..15)` / `use_style(colors=)` to pick fewer; markers stay unique at any size. `plot_cumulative`, `plot_drawdown` and `plot_rolling` lose the 8-series cap and take `drawn=` like `plot_series`.
 - `plot_tradeoff(frontier=True)`: set `False` for the plain scatter without the Pareto frontier line and rings (default unchanged).
 - **No more colour-count refusals.** Every chart that raised "draws at most 3 / 8" now draws (colour repeats past the palette, shape/dash change); `MAX_ALL_PAIRS` is removed. `label=` is written once per distinct value and always on hover; `plot_tradeoff` / `plot_scatter` groups stay distinct by colour and shape at any count.
+- `analyze_series(hist_range=)` forwards the histogram drawing window to `plot_series_distribution`.
 - Visual gallery (`python -m tests.visual`) and a unit test suite.
