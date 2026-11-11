@@ -39,17 +39,20 @@ def _pooled_statistics(
     thresholds: Sequence[float] | None,
     metrics: Mapping[str, Callable[[pd.Series], float]] | None,
     per_series: pd.DataFrame,
+    tail: Mapping[str, Any],
+    turnover: Callable[[pd.Series], float] | None,
 ) -> pd.Series:
     """Statistics of every observation stacked with equal weight per observation.
 
     Turnover keeps differences within each input series. A custom metric is pooled as the
-    observation-count weighted mean of the per-series values.
+    observation-count weighted mean of the per-series values, and so is a custom ``turnover``.
+    Autocorrelation and rolling columns are per series only, so the pooled row leaves them NaN.
     """
     stacked = pd.concat(
         [_finite(s).reset_index(drop=True) for s in frames.values()], ignore_index=True
     )
     row = series_statistics(
-        stacked.rename(_POOLED), quantiles=quantiles, thresholds=thresholds
+        stacked.rename(_POOLED), quantiles=quantiles, thresholds=thresholds, **tail
     ).iloc[0]
     diffs = [
         pd.to_numeric(s, errors="coerce").astype(float).where(lambda v: np.isfinite(v)).diff().abs()
@@ -59,6 +62,10 @@ def _pooled_statistics(
     all_diff = pd.concat(diffs, ignore_index=True).mean()
     all_level = pd.concat(levels, ignore_index=True).mean()
     row["turnover_ratio"] = float(all_diff / all_level) if all_level else np.nan
+    if turnover is not None:
+        row["turnover_ratio"] = float(
+            np.average(per_series["turnover_ratio"], weights=per_series["n"])
+        )
     weights = per_series["n"]
     for name in metrics or {}:
         row[name] = float(np.average(per_series[name], weights=weights))
@@ -197,6 +204,52 @@ def _paths(frames: Mapping[str, pd.Series], pooled: bool) -> dict[str, dict[str,
     return out
 
 
+def _baselines(reference: SeriesLike | None, names: Sequence[str]) -> dict[str, pd.Series]:
+    """``{view name: cumulative baseline}``; a single series is shared by every view."""
+    if reference is None:
+        return {}
+    given = {
+        str(k): v.astype(float)
+        for k, v in as_series_dict(reference, _caller="analyze_series").items()
+    }
+    if len(given) == 1 and len(names) > 1 and next(iter(given)) not in names:
+        only = next(iter(given.values()))
+        return {n: only for n in names if n != _POOLED}
+    return {n: given[n] for n in names if n in given}
+
+
+def _add_baselines(
+    fig: go.Figure, baselines: Mapping[str, pd.Series], label: str, names: Sequence[str]
+) -> None:
+    """Dashed baseline traces, hidden until clicked in the legend, shown only in their view."""
+    st = _style.get_style()
+    menus = fig.to_plotly_json()["layout"].get("updatemenus")
+    menu = menus[0] if menus else None
+    for view, s in baselines.items():
+        fig.add_scatter(
+            x=s.index, y=s.to_numpy(), mode="lines", name=label,
+            line={"color": st.muted, "width": 1.6, "dash": "dash"},
+            visible="legendonly" if menu is None or view == names[0] else False,
+        )  # fmt: skip
+    if menu is None:
+        return
+    for button in menu["buttons"]:
+        visible = list(button["args"][0]["visible"])
+        visible += ["legendonly" if button["label"] == view else False for view in baselines]
+        button["args"][0]["visible"] = visible
+    fig.update_layout(updatemenus=[menu])
+
+
+def _prefix_views(fig: go.Figure, prefix: str) -> None:
+    menus = fig.to_plotly_json()["layout"].get("updatemenus")
+    if not menus:
+        return
+    menu = menus[0]
+    for button in menu["buttons"]:
+        button["label"] = f"{prefix}: {button['label']}"
+    fig.update_layout(updatemenus=[menu])
+
+
 def analyze_series(
     data: SeriesLike,
     title: str = "",
@@ -212,6 +265,18 @@ def analyze_series(
     display_stats: Sequence[str] = _DEFAULT_DISPLAY,
     thresholds: Sequence[float] | None = None,
     metrics: Mapping[str, Callable[[pd.Series], float]] | None = None,
+    reference_series: SeriesLike | None = None,
+    reference_label: str = "reference",
+    normal_reference: bool = False,
+    turnover_ratio: Callable[[pd.Series], float] | None = None,
+    value_label: str = "",
+    view_prefix: str = "",
+    tail_normalize: Literal["std", "rms"] | None = None,
+    tail_center: bool = False,
+    tail_ratios: Sequence[tuple[float, float]] = (),
+    energy_fractions: Sequence[float] = (),
+    acf_lags: Sequence[int] = (),
+    rolling_window: int | None = None,
 ) -> dict[str, Any]:
     """Statistics and five figures for a set of series, in one call.
 
@@ -240,6 +305,25 @@ def analyze_series(
         display_stats: Statistics written on the histogram annotation.
         thresholds: Tail cut-offs, see :func:`plotters.stats.series_statistics`.
         metrics: ``{name: callable}`` extra scalar statistics.
+        reference_series: Series, wide frame or ``{label: Series}`` of baselines **in the same units
+            as the values** (no rescaling is applied), matched to the inputs by name; one series is
+            used for every input. Each baseline is a cumulative path, drawn dashed and **hidden
+            until clicked in the legend**, on the ``cumulative`` figure.
+        reference_label: Legend name of that baseline.
+        normal_reference: Overlay N(0, 1) on the histogram: a descriptive reference, not a fit or a
+            normality test.
+        turnover_ratio: ``callable(series) -> float`` replacing :func:`series_turnover_ratio` in the
+            statistics and in the dropdown text.
+        value_label: Quantity and units for the axes (y of the time figures, x of the histogram).
+        view_prefix: Text before each dropdown entry, e.g. ``"Ticker"`` gives ``Ticker: AAPL``.
+        tail_normalize: ``"rms"`` / ``"std"`` scales each series by its own full retained sample
+            before the tail columns; see :func:`plotters.stats.series_statistics`, as for the next
+            four.
+        tail_center: Subtract the mean before tail scaling.
+        tail_ratios: ``((a, b), ...)`` adds ``tail_ratio_<a>_<b>`` columns.
+        energy_fractions: Adds ``squared_tail_share_<pct>pct`` columns.
+        acf_lags: Adds ``acf_``, ``abs_acf_`` and ``squared_acf_`` columns at these lags.
+        rolling_window: Adds ``rolling_rms_cv_<w>``.
 
     Returns:
         ``{"data": {label: Series}, "stats": DataFrame, "figures": {name: Figure}}`` where
@@ -252,9 +336,20 @@ def analyze_series(
         >>> pl.show_all(out["figures"])
     """
     frames = _prepare(data, series, normalize, center, cut)
-    stats = series_statistics(frames, quantiles=quantiles, thresholds=thresholds, metrics=metrics)
+    tail = {
+        "tail_normalize": tail_normalize,
+        "tail_center": tail_center,
+        "tail_ratios": tail_ratios,
+        "energy_fractions": energy_fractions,
+    }
+    stats = series_statistics(
+        frames, quantiles=quantiles, thresholds=thresholds, metrics=metrics, turnover=turnover_ratio,
+        acf_lags=acf_lags, rolling_window=rolling_window, **tail,
+    )  # fmt: skip
     if pooled and len(frames) > 1:
-        row = _pooled_statistics(frames, quantiles, thresholds, metrics, stats)
+        row = _pooled_statistics(
+            frames, quantiles, thresholds, metrics, stats, tail, turnover_ratio
+        )
         stats = pd.concat([row.to_frame(_POOLED).T, stats])
 
     paths = _paths(frames, pooled)
@@ -267,22 +362,37 @@ def analyze_series(
         "cumulative": "cumulative sum",
         "cumulative_absolute": "cumulative absolute sum",
     }
+    axis_titles = {
+        "values": value_label,
+        "absolute": f"|{value_label}|" if value_label else "",
+        "cumulative": f"cumulative {value_label}" if value_label else "",
+        "cumulative_absolute": f"cumulative |{value_label}|" if value_label else "",
+    }
+    baselines = _baselines(reference_series, names)
+    turnover_fn = turnover_ratio or series_turnover_ratio
     figures: dict[str, go.Figure] = {}
     for key, text in labels.items():
+        with_baseline = key == "cumulative" and bool(baselines)
         fig = plot_series(
-            paths[key], prefix + text, views=views if len(names) > 1 else None, legend=False
-        )
-        if len(names) > 1:
-            if key == "values":
-                turnover = {
-                    n: f"turnover {series_turnover_ratio(paths['values'][n]):.4g}" for n in names
-                }
-                annotate_views(fig, turnover)
+            paths[key], prefix + text, views=views if len(names) > 1 else None,
+            ylabel=axis_titles[key], legend=with_baseline,
+        )  # fmt: skip
+        if with_baseline:
+            _add_baselines(fig, baselines, reference_label, names)
+        if len(names) > 1 and key == "values":
+            annotate_views(
+                fig, {n: f"turnover {turnover_fn(paths['values'][n]):.4g}" for n in names}
+            )
         figures[key] = fig
     figures["histogram"] = plot_series_distribution(
         frames, prefix + "distribution", bins=bins, hist_range=hist_range, pooled=pooled,
-        quantiles=quantiles, display_stats=display_stats,
+        quantiles=quantiles, display_stats=display_stats, normal_reference=normal_reference,
     )  # fmt: skip
+    if value_label:
+        figures["histogram"].update_xaxes(title_text=value_label)
+    if view_prefix:
+        for fig in figures.values():
+            _prefix_views(fig, view_prefix)
     first = [c for c in ("n", *display_stats) if c in stats.columns]
     stats = stats[[*first, *[c for c in stats.columns if c not in first]]]
     return {"data": frames, "stats": stats, "figures": figures}

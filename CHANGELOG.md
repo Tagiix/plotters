@@ -22,4 +22,6 @@ First release.
 - `plot_tradeoff(frontier=True)`: set `False` for the plain scatter without the Pareto frontier line and rings (default unchanged).
 - **No more colour-count refusals.** Every chart that raised "draws at most 3 / 8" now draws (colour repeats past the palette, shape/dash change); `MAX_ALL_PAIRS` is removed. `label=` is written once per distinct value and always on hover; `plot_tradeoff` / `plot_scatter` groups stay distinct by colour and shape at any count.
 - `analyze_series(hist_range=)` forwards the histogram drawing window to `plot_series_distribution`.
+- `series_statistics` gains `rms`, `mean_absolute`, `mean_over_std`, `median` and the options `tail_normalize`, `tail_center`, `tail_ratios`, `energy_fractions`, `acf_lags`, `rolling_window`, `turnover`. `analyze_series` gains `reference_series`, `reference_label`, `normal_reference`, `turnover_ratio`, `value_label`, `view_prefix` and passes the tail options through. `plot_null_test(normal_reference=, null_label=)` adds an N(0, 1) line and a legend.
+- `plot_tradeoff(rings=, label_text=)`: no rings on the frontier, labels decluttered (`"auto"`), every label, or hover only; hover is `closest`.
 - Visual gallery (`python -m tests.visual`) and a unit test suite.

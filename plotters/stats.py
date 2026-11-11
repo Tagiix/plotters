@@ -89,6 +89,13 @@ def series_statistics(
     thresholds: Sequence[float] | None = None,
     metrics: Mapping[str, Callable[[pd.Series], float]] | None = None,
     group_level: int | str | None = None,
+    tail_normalize: Literal["std", "rms"] | None = None,
+    tail_center: bool = False,
+    tail_ratios: Sequence[tuple[float, float]] = (),
+    energy_fractions: Sequence[float] = (),
+    acf_lags: Sequence[int] = (),
+    rolling_window: int | None = None,
+    turnover: Callable[[pd.Series], float] | None = None,
 ) -> pd.DataFrame:
     """One row per series: moments, quantiles, tail frequencies and turnover.
 
@@ -99,45 +106,144 @@ def series_statistics(
         data: Series, wide DataFrame or ``{label: Series}``.
         series: Subset and order of series.
         quantiles: Quantile levels, one column each (``q1``, ``q5``, ``q50`` ...).
-        thresholds: Tail cut-offs **in the input's own units**: ``tail_<t>`` is the share of
-            observations with ``|x| > t``. ``None`` uses 2 and 3 standard deviations of each
-            series (``tail_2std``, ``tail_3std``). No standardisation is implied otherwise.
+        thresholds: Tail cut-offs. With ``tail_normalize=None`` they are **in the input's own
+            units**: ``tail_<t>`` is the share of observations with ``|x| > t`` (``None`` uses 2
+            and 3 standard deviations of each series: ``tail_2std``, ``tail_3std``). With
+            ``tail_normalize`` set they are in that scale's units (default 2 and 3) and give
+            ``tail_probability_<t><unit>`` and ``tail_count_<t><unit>``, where the unit is
+            ``rms`` or ``std``. Thresholds used by ``tail_ratios`` are added automatically.
         metrics: ``{name: callable}``; each callable takes a Series and returns a scalar,
             added as a column.
         group_level: Passed to :func:`series_turnover_ratio`.
+        tail_normalize: ``"rms"`` or ``"std"`` divides each series by its own full retained
+            sample's scale before the tail columns are counted (retrospective, descriptive;
+            the moment columns are unchanged). ``None`` leaves the units.
+        tail_center: Subtract the sample mean before scaling (the scale itself is measured
+            before centring, as in :func:`normalize_series`).
+        tail_ratios: ``((a, b), ...)``; adds ``tail_ratio_<a>_<b>`` (with the unit after each
+            number when scaled) = P(|z| > a) / P(|z| > b). A zero denominator gives NaN; a zero
+            numerator over a positive denominator gives 0.
+        energy_fractions: Fractions ``f``; adds ``squared_tail_share_<100f>pct``, the share of
+            the sum of squares carried by the largest ``ceil(f * n)`` absolute values (invariant
+            to rescaling).
+        acf_lags: Lags ``k``; adds ``acf_<k>``, ``abs_acf_<k>`` and ``squared_acf_<k>``, the
+            autocorrelation of the values, their absolute values and their squares. Lags count
+            retained finite rows, not calendar days.
+        rolling_window: Window ``w``; adds ``rolling_rms_cv_<w>``, the standard deviation over
+            the mean of the trailing-``w`` RMS.
+        turnover: Replaces :func:`series_turnover_ratio` in the ``turnover_ratio`` column; takes
+            the series, returns a scalar.
 
     Returns:
-        DataFrame indexed by series label with columns ``n, mean, std, skewness,
-        excess_kurtosis, min, max``, the quantiles, the tails, ``turnover_ratio`` and any
-        custom metrics.
+        DataFrame indexed by series label with columns ``n, mean, std, rms, mean_absolute,
+        mean_over_std, skewness, excess_kurtosis, median, min, max``, the quantiles, the tails,
+        the optional ratio, share, autocorrelation and rolling columns, ``turnover_ratio`` and
+        any custom metrics.
+
+    Raises:
+        ValueError: unknown ``tail_normalize``, or a series with zero scale when scaling.
     """
+    if tail_normalize not in ("std", "rms", None):
+        raise ValueError(f"tail_normalize must be 'std', 'rms' or None, got {tail_normalize!r}")
     frames = pick(as_series_dict(data, _caller="series_statistics"), series)
     rows: dict[str, dict[str, float]] = {}
     for name, raw in frames.items():
         x = _finite(raw)
+        has = len(x) > 0
         row: dict[str, float] = {
             "n": float(len(x)),
-            "mean": float(x.mean()) if len(x) else np.nan,
-            "std": float(x.std(ddof=0)) if len(x) else np.nan,
+            "mean": float(x.mean()) if has else np.nan,
+            "std": float(x.std(ddof=0)) if has else np.nan,
+            "rms": float(np.sqrt((x**2).mean())) if has else np.nan,
+            "mean_absolute": float(x.abs().mean()) if has else np.nan,
+            "mean_over_std": np.nan,
             "skewness": _f(x.skew()) if len(x) > 2 else np.nan,
             "excess_kurtosis": _f(x.kurt()) if len(x) > 3 else np.nan,
-            "min": float(np.min(x)) if len(x) else np.nan,
-            "max": float(np.max(x)) if len(x) else np.nan,
+            "median": float(x.median()) if has else np.nan,
+            "min": float(np.min(x)) if has else np.nan,
+            "max": float(np.max(x)) if has else np.nan,
         }
+        if has and row["std"] > 0:
+            row["mean_over_std"] = row["mean"] / row["std"]
         for q in quantiles:
-            row[_quantile_name(q)] = float(x.quantile(q)) if len(x) else np.nan
-        if thresholds is None:
-            sd = row["std"]
-            for k in (2, 3):
-                row[f"tail_{k}std"] = float((x.abs() > k * sd).mean()) if len(x) else np.nan
-        else:
-            for t in thresholds:
-                row[_tail_name(t)] = float((x.abs() > t).mean()) if len(x) else np.nan
-        row["turnover_ratio"] = series_turnover_ratio(raw, group_level=group_level)
+            row[_quantile_name(q)] = float(x.quantile(q)) if has else np.nan
+        row.update(
+            _tail_columns(x, row, thresholds, tail_normalize, tail_center, tail_ratios, name)
+        )
+        for fraction in energy_fractions:
+            row[f"squared_tail_share_{fraction * 100:g}pct"] = _squared_tail_share(x, fraction)
+        for lag in acf_lags:
+            row[f"acf_{lag}"] = _acf_at(x, lag)
+            row[f"abs_acf_{lag}"] = _acf_at(x.abs(), lag)
+            row[f"squared_acf_{lag}"] = _acf_at(x**2, lag)
+        if rolling_window:
+            row[f"rolling_rms_cv_{rolling_window}"] = _rolling_rms_cv(x, rolling_window)
+        row["turnover_ratio"] = (
+            float(turnover(raw))
+            if turnover is not None
+            else series_turnover_ratio(raw, group_level=group_level)
+        )
         for metric_name, fn in (metrics or {}).items():
             row[metric_name] = float(fn(x))
         rows[str(name)] = row
     return pd.DataFrame.from_dict(rows, orient="index")
+
+
+def _tail_columns(
+    x: pd.Series,
+    row: Mapping[str, float],
+    thresholds: Sequence[float] | None,
+    normalize: Literal["std", "rms"] | None,
+    center: bool,
+    ratios: Sequence[tuple[float, float]],
+    name: object,
+) -> dict[str, float]:
+    out: dict[str, float] = {}
+    if normalize is None:
+        if thresholds is None:
+            for k in (2, 3):
+                out[f"tail_{k}std"] = float((x.abs() > k * row["std"]).mean()) if len(x) else np.nan
+        else:
+            for t in thresholds:
+                out[_tail_name(t)] = float((x.abs() > t).mean()) if len(x) else np.nan
+        z, unit = x.abs(), ""
+    else:
+        scale = row[normalize]
+        if len(x) and (not np.isfinite(scale) or scale == 0):
+            raise ValueError(f"series {name!r} has zero or undefined scale; cannot normalise")
+        z = ((x - (row["mean"] if center else 0.0)) / scale).abs() if len(x) else x
+        unit = normalize
+        cuts = sorted(
+            {*(thresholds if thresholds is not None else (2, 3)), *(t for r in ratios for t in r)}
+        )
+        for t in cuts:
+            out[f"tail_probability_{t:g}{unit}"] = float((z > t).mean()) if len(x) else np.nan
+            out[f"tail_count_{t:g}{unit}"] = float((z > t).sum()) if len(x) else np.nan
+    for a, b in ratios:
+        pa, pb = ((z > a).mean(), (z > b).mean()) if len(x) else (np.nan, np.nan)
+        out[f"tail_ratio_{a:g}{unit}_{b:g}{unit}"] = float(pa / pb) if pb > 0 else np.nan
+    return out
+
+
+def _squared_tail_share(x: pd.Series, fraction: float) -> float:
+    energy = float((x**2).sum())
+    if len(x) == 0 or energy == 0:
+        return float("nan")
+    k = int(np.ceil(fraction * len(x)))
+    largest = np.sort(x.abs().to_numpy())[::-1][:k]
+    return float((largest**2).sum() / energy)
+
+
+def _acf_at(x: pd.Series, lag: int) -> float:
+    if lag < 1 or len(x) <= lag or float(x.var(ddof=0)) == 0:
+        return float("nan")
+    return float(acf_values(x, lag)[lag - 1])
+
+
+def _rolling_rms_cv(x: pd.Series, window: int) -> float:
+    rms = ((x.reset_index(drop=True) ** 2).rolling(window).mean() ** 0.5).dropna()
+    mean = float(rms.mean()) if len(rms) else np.nan
+    return float(rms.std(ddof=0) / mean) if np.isfinite(mean) and mean != 0 else float("nan")
 
 
 @dataclass(frozen=True)

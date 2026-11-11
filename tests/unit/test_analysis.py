@@ -117,3 +117,48 @@ def test_analyze_series_hist_range_is_forwarded(frame):
     out = pl.analyze_series(frame, hist_range=(-0.5, 0.5), bins=10)
     bar = out["figures"]["histogram"].data[0]
     assert min(bar.x) >= -0.5 and max(bar.x) <= 0.5
+
+
+def test_statistics_new_columns_match_hand_values():
+    x = pd.Series([1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0, -10.0], name="x")
+    row = pl.series_statistics(
+        x, tail_normalize="rms", thresholds=(1,), tail_ratios=((2, 1),),
+        energy_fractions=(0.2,), acf_lags=(1,), rolling_window=3,
+    ).loc["x"]  # fmt: skip
+    rms = np.sqrt((x**2).mean())
+    z = (x / rms).abs()
+    assert row["rms"] == pytest.approx(rms)
+    assert row["mean_absolute"] == pytest.approx(5.5)
+    assert row["median"] == pytest.approx(x.median())
+    assert row["tail_probability_1rms"] == pytest.approx((z > 1).mean())
+    assert row["tail_count_2rms"] == (z > 2).sum()
+    assert row["tail_ratio_2rms_1rms"] == pytest.approx((z > 2).mean() / (z > 1).mean())
+    top2 = np.sort(x.abs())[::-1][:2]
+    assert row["squared_tail_share_20pct"] == pytest.approx((top2**2).sum() / (x**2).sum())
+    assert row["acf_1"] == pytest.approx(pl.acf_values(x, 1)[0])
+    assert "abs_acf_1" in row and "squared_acf_1" in row and "rolling_rms_cv_3" in row
+
+
+def test_analyze_series_accepts_the_notebook_call(frame):
+    out = pl.analyze_series(
+        frame, "Series analysis", bins=20, hist_range=(-3, 3), cut=1,
+        reference_series=frame * 0.5, reference_label="half", normal_reference=True,
+        turnover_ratio=lambda s: float(s.abs().mean()), value_label="return (%)",
+        view_prefix="Ticker", normalize="std", tail_normalize="rms", tail_ratios=((3, 1),),
+    )  # fmt: skip
+    cum = out["figures"]["cumulative"]
+    assert sum(t.name == "half" for t in cum.data) == frame.shape[1]
+    assert all(b.label.startswith("Ticker: ") for b in cum.layout.updatemenus[0].buttons)
+    assert cum.layout.yaxis.title.text == "cumulative return (%)"
+    assert out["figures"]["histogram"].layout.xaxis.title.text == "return (%)"
+    assert "tail_ratio_3rms_1rms" in out["stats"].columns
+    assert out["stats"]["turnover_ratio"].notna().all()
+
+
+def test_null_test_normal_reference_legend():
+    fig = pl.plot_null_test(
+        np.random.default_rng(0).normal(size=500), 0.583, null_label="Bootstrap null",
+        normal_reference=True,
+    )  # fmt: skip
+    names = [t.name for t in fig.data if t.name]
+    assert names == ["Bootstrap null", "N(0, 1) reference", "observed (+0.583)"]

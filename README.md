@@ -215,7 +215,7 @@ One section per module. Everything is imported from `plotters` directly (`pl.plo
 
 | Function | For |
 |---|---|
-| `analyze_series` | Statistics plus five figures (values, absolute values, cumulative sum, cumulative absolute sum, histogram), each with a pooled view and one view per series |
+| `analyze_series` | Statistics plus five figures (values, absolute values, cumulative sum, cumulative absolute sum, histogram), each with a pooled view and one view per series. Also: `hist_range`, `cut`, `reference_series` / `reference_label` (a cumulative baseline hidden until clicked in the legend), `normal_reference`, `turnover_ratio` (your own metric), `value_label` (axis units), `view_prefix` (dropdown text), and the tail options of `series_statistics` |
 | `compare_series` | Several series on the same dates against one reference (`align="inner"/"outer"`); differences are reference minus the others |
 | `plot_series_distribution` | Histogram with a dropdown, statistics block and quantile markers |
 
@@ -257,7 +257,7 @@ A pooled **distribution** and a pooled **path** are different quantities: the hi
 
 | Function | For |
 |---|---|
-| `plot_null_test` | A simulated distribution with the tested value and the rejection region shaded: the picture of a hypothesis test. The p value is counted from the distribution |
+| `plot_null_test` | A simulated distribution with the tested value and the rejection region shaded: the picture of a hypothesis test. The p value is counted from the distribution. `normal_reference=True` adds an N(0, 1) line and a legend (`null_label=` names the histogram) |
 | `plot_box` | One box per group ranked by median: the ranking chart. `points=True`, `reference=`, `logvalue=` |
 | `plot_histogram` | Overlaid distributions on shared bins, optional normal fit |
 | `plot_ecdf` | The distribution with no bin-width choice; `complementary=True` with `logy=True` for tails |
@@ -360,7 +360,7 @@ Useful on their own, and the bridge between the input conventions.
 | `group_by_prefix(labels, {group: (prefix, ...)}, other=)` | Group names by the **longest** matching prefix; raises on an unmatched label unless `other` is given |
 | `label_from(frame, *columns, sep=" ")` | Labels for `label=`; NaN parts are skipped |
 | `as_series_dict`, `as_value_series`, `pick` | The convention normalisers, and subsetting in the order given |
-| `series_statistics`, `series_turnover_ratio`, `normalize_series` | Moments, quantiles, tail frequencies, turnover; per-series scaling |
+| `series_statistics`, `series_turnover_ratio`, `normalize_series` | Moments (`n, mean, std, rms, mean_absolute, mean_over_std, skewness, excess_kurtosis, median`), quantiles, tail frequencies, turnover; per-series scaling. Options: `tail_normalize="rms"/"std"` (+ `tail_center`) gives `tail_probability_<t>rms` and `tail_count_<t>rms`; `tail_ratios=((3, 1),)` gives `tail_ratio_3rms_1rms`; `energy_fractions=(0.01,)` gives `squared_tail_share_1pct`; `acf_lags=(1, 5, 21)` gives `acf_`, `abs_acf_`, `squared_acf_`; `rolling_window=21` gives `rolling_rms_cv_21`; `turnover=` swaps the turnover metric |
 | `acf_values`, `pacf_values`, `bartlett_band`, `ccf_values`, `ljung_box`, `periodogram` | The numbers behind the time-series diagnostics |
 | `sample_expectile`, `roc_curve`, `roc_auc`, `precision_recall_curve`, `average_precision`, `one_standard_error_choice` | The numbers behind the distribution and learning plots |
 

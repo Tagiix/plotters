@@ -51,6 +51,8 @@ def plot_null_test(
     bins: int = 60,
     xlabel: str = "statistic",
     observed_label: str = "observed",
+    null_label: str = "null",
+    normal_reference: bool = False,
     height: int = HEIGHT,
     width: int | None = None,
 ) -> go.Figure:
@@ -72,6 +74,10 @@ def plot_null_test(
         xlabel: X axis title.
         observed_label: Text written next to the observed line, e.g. ``"equal predictive
             ability"`` when ``observed`` is 0.
+        null_label: Legend name of the histogram, e.g. ``"Bootstrap null"``.
+        normal_reference: Overlay the standard normal N(0, 1) as a dashed line (descriptive, not a
+            fit) and show a legend with the histogram, the reference and the observed value. Only
+            meaningful when ``null`` is on a standardised scale.
         height: Figure height in px.
         width: Figure width in px; ``None`` fills the container.
 
@@ -110,8 +116,15 @@ def plot_null_test(
     bin_width = edges[1] - edges[0]
     fig = go.Figure(
         go.Bar(x=centers, y=counts / (n * bin_width), width=bin_width, marker={"color": _color.with_alpha(st.accent, 0.55), "line": {"width": 0}},
-               showlegend=False, hovertemplate="%{x:.4g}<br>density %{y:.3g}<extra></extra>")
+               name=null_label, showlegend=normal_reference,
+               hovertemplate="%{x:.4g}<br>density %{y:.3g}<extra></extra>")
     )  # fmt: skip
+    if normal_reference:
+        grid = np.linspace(lo - pad, hi + pad, 200)
+        fig.add_scatter(x=grid, y=np.exp(-grid**2 / 2) / np.sqrt(2 * np.pi), mode="lines", name="N(0, 1) reference",
+                        line={"color": st.negative, "width": 1.6, "dash": "dash"}, hoverinfo="skip")  # fmt: skip
+        fig.add_scatter(x=[None], y=[None], mode="lines", name=f"{observed_label} ({observed:+.3g})",
+                        line={"color": st.ink, "width": 2}, hoverinfo="skip")  # fmt: skip
     # The rejection region as a band per tail, full height, so "in the tail" is seen directly.
     bands = [(lo - pad, lo_cut)] if np.isfinite(lo_cut) else []
     bands += [(hi_cut, hi + pad)] if np.isfinite(hi_cut) else []
@@ -140,7 +153,7 @@ def plot_null_test(
         xlabel=xlabel,
         ylabel="density",
         height=height,
-        legend=False,
+        legend=normal_reference,
         width=width,
     )
 
